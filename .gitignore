@@ -1,0 +1,24 @@
+# Python and package builds
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Virtual environments and tooling
+.venv/
+.venv-*/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# External validation inputs; fetch them locally, never commit them.
+# Both SingleStepTests corpora land here (scripts/fetch_test_vectors.py).
+tests/68000_test_vectors/
+
+# MAME oracle runs: traces, error.log, nvram, cfg. Never commit ROMs or traces.
+validation/mame_runs/
+*.trace
+error.log
