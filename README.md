@@ -7,13 +7,16 @@ memory space and the devices, the core owns instruction semantics, the
 status register, the prefetch queue, and the exception model, and `step()`
 returns the clock total of what it ran.
 
-**Status: documents and oracles only.** There is no core code in this
-repository yet. What is here is the groundwork a later session builds from:
-a primer on the processor, the cycle tables, the undefined-but-deterministic
-behaviors with their evidence, every 68000 oracle found ranked by tier with
-pinned revisions, a fetch script that has been run once, a working recipe
-for MAME traces, and a handoff brief with milestones. See
-[docs/README.md](docs/README.md).
+**Status: the whole 68000 instruction set, certified against two oracles,
+not yet released.** Against **hardware-captured** values it passes every
+input of flamewing's BCD verifier tables (`ABCD`, `SBCD`, `NBCD`: 525,312
+cases, result and all five flags). Against the pinned, **microcode-derived**
+SingleStepTests/m68000 corpus it passes **317,500 of 317,500** cases, with no
+exclusions, compared on registers, SR, both stack pointers, the prefetch
+queue, RAM, the clock total and every bus access in order with its function
+code. The MAME whole-game lockstep, the second corpus as a detector and the
+interrupt scenarios are in progress ([docs/worklog.md](docs/worklog.md)); the
+certification record with every pin is [docs/validation.md](docs/validation.md).
 
 ## Scope
 
@@ -53,15 +56,37 @@ so rather than hide it:
 The [handoff brief](docs/handoff-brief.md) estimates the core at two to
 three times z80-python's size and orders the work by oracle tier.
 
-## The embedding contract (planned)
+## The embedding contract
 
-The same shape as the sibling cores. A host passes the CPU byte and word
-memory accessors as callables for a 24-bit space, drives the interrupt
-priority level between steps, and answers the interrupt-acknowledge
-callback; the core never allocates memory, never schedules a frame, and
-never knows what a scanline is. Cycle totals returned by `step()` are the
-documented per-instruction totals restated in [docs/timing.md](docs/timing.md)
-and checked, case by case, against the corpus.
+The same shape as the sibling cores, callables rather than subclassing:
+
+```python
+from m68000_python import M68000CPU, AUTOVECTOR
+
+cpu = M68000CPU(read_byte, read_word, write_byte, write_word)
+cpu.reset()                 # SSP and PC from $000000 and $000004
+while running:
+    clocks = cpu.step()     # one instruction or one exception entry
+    ...                     # the host advances its devices by `clocks`
+    cpu.set_ipl(level)      # 0-7, between steps
+```
+
+The four callables see 24-bit addresses; a word access is always at an even
+address (the core raises the address error itself), and a long is two word
+accesses, high word first unless the microcode writes the low word first
+(`-(An)` destinations, read-modify-write results). Optional keywords, each
+free unless used: `acknowledge(level)` answers the interrupt-acknowledge
+cycle with a vector, `AUTOVECTOR` or `SPURIOUS`; `function_codes=True`
+passes `fc=` on every access; `tas_write(address, value)` receives TAS's
+write half (the Genesis bus drops it); `address_error(address, write, fc)`
+is told about an access an address error aborted. A host raises `BusError`
+from a callable to assert BERR. The core never allocates memory, never
+schedules a frame and never assumes it owns time: `step()` returns clocks and
+the host decides everything else.
+
+Speed, on the loop in `benchmarks/speed.py` (a shared, loaded machine):
+about 0.6 million instructions per second on CPython 3.14 and 22 million on
+PyPy 7.3.23 (the Mega Drive's 68000 runs about 1 million a second).
 
 ## Oracles
 
@@ -86,14 +111,22 @@ No hardware-captured single-step corpus for the 68000 exists as of
 ```text
 README.md                    this file
 LICENSE                      MIT, copyright 2026 alewman
+src/m68000_python/           the core: _core (bus, prefetch, exceptions), _ea,
+                             _flags, _alu, _loads, _bits, _shifts, _bcd,
+                             _control, _system, _dispatch (the opcode map),
+                             cpu (M68000CPU), disasm
+tests/                       corpus reader and harness, the gates, readability
+scripts/run_corpus.py        run corpus files and print failures
+scripts/fetch_test_vectors.py
+benchmarks/speed.py          instructions per second
 docs/README.md               index of the documents
 docs/start-here.md           the processor primer
 docs/timing.md               cycle tables and host clocks
 docs/undocumented-behavior.md
-docs/validation.md           oracles, tiers, pins, corpus shapes
+docs/validation.md           the certification record; oracles, tiers, pins
 docs/mame-oracle.md          the MAME trace recipe
+docs/worklog.md              what was run, when, with what result
 docs/handoff-brief.md        the brief for the session that builds the core
-scripts/fetch_test_vectors.py
 tests/68000_test_vectors/    fetched corpora, ignored by git
 ```
 

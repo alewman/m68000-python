@@ -222,3 +222,89 @@ When the core exists, the order of authority is:
 
 Every rule adopted from this page gets a comment on the line that
 implements it, naming the tier.
+
+## Settled while building the core (2026-09-19)
+
+Each rule below is what the pinned SingleStepTests/m68000 corpus records on
+every one of its cases (T3, MAME 0.285's microcode transcription), found
+while bringing the core to 317,500 / 317,500; the code line that encodes it
+carries a comment naming it. Where a higher tier speaks, it is named.
+
+**Flags after DIVU and DIVS overflow.** `V=1, N=1, Z=0, C=0`, destination
+unchanged: the corpus agrees with WinUAE's `setdivuflags`/`setdivsflags`
+(T2), not with Musashi. The clock counts follow the shift-and-subtract loop
+of Jorge Cwik's analysis (carried in WinUAE, T2) and match every DIVU and
+DIVS case. Divide by zero is still absent from the corpus (its issue #3).
+
+**Flags after CHK.** Z from Dn = 0, N from Dn < 0, V and C clear, on every
+path: agrees with WinUAE (T2), not with Musashi's non-trapping path. Clocks:
+the upper bound is tested first (trap after 8 internal clocks); a negative
+Dn within the bound traps after 10, or after 8 when `bound - Dn` taken as a
+16-bit difference is negative (all 2,500 cases).
+
+**The stacked PC of an address error** is the microcode's PC register, not
+the address of the instruction. At the start of an instruction it holds the
+instruction's address + 2; the microcode copies the fetch address into it
+at mode-specific steps: before a `-(An)` word operand, before an absolute
+address's last extension word, before a MOVE destination's extension word,
+before a MOVE destination write to `(An)`/`(An)+`, before the target read of
+a taken `DBcc`, `JSR` (except `(An)`) and after `BSR` (which stacks the
+target itself), at each closing prefetch, and at a few others the handlers
+name (`_commit_pc` in the code). A long `-(An)` source does not copy it.
+
+**The IR word and bits 15-5 of the access-information word** carry IRD, the
+opcode the decoder holds. The closing prefetch hands it the next opcode
+before its read; so a MOVE to `-(An)`, which prefetches before it writes,
+stacks the *next* instruction's opcode when its write faults. A long MOVE to
+`-(An)` hands it over only between its two writes. I/N (bit 3) is 0 for an
+instruction's own accesses and 1 for exception processing's; the function
+code is the one the aborted access used.
+
+**The access address** stacked is the whole 32-bit value the address unit
+computed, upper byte included (the bus sees only A23-A1).
+
+**Clocks of an address error:** the aborted access costs its 4 clocks and 4
+more, then two internal steps of 2; then 7 writes, 2 vector reads, and the
+refill with 2 internal clocks between its reads: 58 clocks from the aborted
+access to the handler's first instruction. UM Table 8-14 prints 50(4/7); the
+corpus's 8 more are the aborted cycle and the extra 4 after it.
+
+**Stacking order.** Group 1/2 frames: PC low, SR, PC high. Group 0 frames:
+PC low, SR, PC high, IR, address low, information word, address high.
+BSR, JSR and PEA push a long high word first; MOVE.L to `-(An)`, ADDX/SUBX
+`-(An)`, MOVEM to `-(An)` and read-modify-write results write the low word
+first.
+
+**Long results set their flags in two halves.** The ALU is 16 bits wide:
+N Z V C come first from the low word, then N from the high word with Z kept
+only if the high word is zero too. A MOVE.L that faults on its first write
+stacks whichever half-state the microcode had reached: for a register or
+immediate source to `(An)`/`(An)+` the flags are untouched, to `(d16,An)`/
+`(d8,An,Xn)` only the high-word half is applied; from memory to `(An)`,
+`(An)+` or `(xxx).L` only the low-word half; every other destination has
+complete flags before its first write.
+
+**When address registers move**, which the final registers of a faulting
+case show: a word or byte `(An)+`/`-(An)` operand moves An before the
+access; a long `(An)+` source moves it between its two words (so a fault
+leaves it), a long `-(An)` source before; a MOVE destination `(An)+` moves
+after the write, and a MOVE.L destination `-(An)` between its two writes;
+CMPM steps Ay one word at a time and Ax only after its operand is read; UNLK
+moves SP only after both words are read; DBcc writes Dn only after it has
+read the branch target, and JSR reads the target's first word before it
+pushes anything, so an odd target faults with Dn and the stack untouched.
+
+**LINK A7** pushes A7's value from before the push.
+
+**MOVE to SR/CCR and the SR/CCR immediates** re-read the next instruction
+after writing SR (the refill is two reads), 4 internal clocks for MOVE and
+8 for ANDI/ORI/EORI.
+
+**TAS** takes 14 clocks for `(An)`: operand read, 2 internal clocks, the
+write, the prefetch. The corpus README doubts its TAS timing, but WinUAE's
+68000 generator (T2) gives the same totals; see [validation](validation.md).
+
+**A group 0 fault during group 0 processing** (an odd SSP or an odd handler
+address after an address error) halts the processor, as UM 5.4.4 says.
+MAME 0.285 takes another address error instead; the corpus has no such
+case, so this is the manual's rule, untested (docs/worklog.md).

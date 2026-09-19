@@ -100,3 +100,29 @@ does the logging; function codes are passed only when the host asks).
   result and all five flags.** CPython 3.14.4: 0.8 s; PyPy 7.3.23 /
   Python 3.11.15: see the commit.
 - Corpus: ABCD, SBCD, NBCD 2,500/2,500 each.
+
+### Rung 3 (2026-09-19)
+
+- Every family written (`_alu.py`, `_bits.py`, `_shifts.py`, `_system.py`,
+  the rest of `_loads.py` and `_control.py`); `tests/test_corpus.py` now
+  gates all 127 files.
+- **SingleStepTests/m68000 @ `64b25311`: 317,500 / 317,500, no exclusions.**
+  CPython 3.14.4: 27.4 s under pytest (`nice -n 10`, load ~45);
+  `scripts/run_corpus.py --all` 33 s. PyPy 7.3.23: 25.9 s under pytest,
+  15.2 s for the script. Commit 66d373f.
+- TAS: the corpus's totals are also WinUAE's (T2, `gencpu.cpp` at
+  `1977af5`), so no cycle exclusion was needed. TRAPV: the README's
+  "strange issue" did not appear. Both recorded in `docs/validation.md`.
+- Rules the corpus settled are in `docs/undocumented-behavior.md`,
+  "Settled while building the core"; notable: DIVU/DIVS overflow flags
+  (N=1, V=1, Z=0, C=0) and CHK flags agree with WinUAE (T2) rather than
+  Musashi; a CHK timing rule for negative Dn; long results' flags in two
+  halves visible to a faulting first write.
+- Readability test (`tests/test_readability.py`): 173 handler checks pass;
+  no fallback handler remains.
+- Speed (`benchmarks/speed.py`, 5-10 s runs, loaded machine): CPython
+  3.14.4 about 596,000 instructions/s (4.6 emulated MHz); PyPy 7.3.23
+  about 22.6 million/s (175 emulated MHz) on that tight loop.
+- CI: `.github/workflows/ci.yml` runs the fast suite on 3.11-3.14 and
+  PyPy, and the corpus gate (fetched once per pin, cached) on 3.14 and
+  PyPy. Not run on GitHub: the repository is local only.

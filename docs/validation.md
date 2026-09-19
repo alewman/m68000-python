@@ -1,11 +1,82 @@
-# Validation: the oracles, their tiers, and what was fetched
+# Validation: the certification record, and the oracles behind it
 
 ## Claim
 
-None yet. This repository holds documents and oracle plumbing; there is no
-core to certify. What this page does is rank every 68000 oracle found, so
-that when the core exists the certification record is written against pins
-fixed today rather than against whatever is convenient then.
+`m68000-python` agrees with the **hardware-captured** BCD tables of
+flamewing's verifier on every input of `ABCD`, `SBCD` and `NBCD` (result and
+all five flags), and with **every case** of the pinned, **microcode-derived**
+SingleStepTests/m68000 corpus: 317,500 of 317,500, each compared on
+registers, SR, both stack pointers, the prefetch queue, RAM, the clock total
+and the ordered bus transactions with their function codes. No case is
+excluded. Everything beyond BCD therefore rests on an emulator-derived
+oracle (MAME 0.285's microcode transcription): a strong detector, not a
+hardware judgement. Not yet run: the MAME whole-game lockstep (rung 4), the
+680x0 corpus as a detector (rung 5), and the interrupt scenarios (rung 6);
+see [worklog](worklog.md) for where each stands.
+
+## Certification record
+
+Linux x86_64, a shared 32-core machine at a load average of 30-50 (timings
+are upper bounds). CPython 3.14.4; PyPy 7.3.23 / Python 3.11.15.
+
+| Gate | Tier | Pin | Result | CPython | PyPy |
+| --- | --- | --- | --- | ---: | ---: |
+| BCD tables: ABCD 262,144 + SBCD 262,144 + NBCD 1,024 inputs, result and X N Z V C (`tests/test_bcd.py`) | T1 | flamewing/68k-bcd-verifier `39a01be528b0744302bf1dc9b3463fc22a3fc45f`, table SHA-256 `8432868c…80147e5` | all agree | 0.8 s | 0.9 s |
+| SingleStepTests/m68000, 127 files, 317,500 cases (`tests/test_corpus.py`) | T3 (microcode) | `64b253116a3de04aaac4346c43680960dc9b67e5` | 317,500 / 317,500 | 27 s | 26 s |
+| Decoder: 65,536 first words vs MAME 0.285 `m68000.lst` | T3 | `mame0285` | 45,815 defined + ILLEGAL + 8,192 line A/F, every word's family agrees | -- | -- |
+
+Commands, from the repository root with the corpus fetched
+(`python scripts/fetch_test_vectors.py`):
+
+```text
+python -m pytest -q tests/test_bcd.py tests/test_corpus.py
+python scripts/run_corpus.py --all            # the same comparison, one line per file
+```
+
+`M68000_BCD_TABLE=path/to/bcd-table.bin` makes the BCD gate compare byte by
+byte against a locally generated table (build `bcd-gen.cc` at the pin with
+any C++ compiler and run it); without it the gate compares SHA-256.
+
+### What each corpus case compares
+
+`tests/harness.py` loads the initial state into the core (the corpus's
+`pc` is the prefetch address, the instruction's own address + 4, and
+`prefetch` is IR and IRC), runs one `step()`, and compares: D0-D7, A0-A6,
+USP, SSP, SR, the prefetch address, IR and IRC, every RAM word the final
+state lists, the clock total, and the complete ordered list of bus accesses,
+each with kind (read, write, aborted read, aborted write), address, size,
+the 16-bit bus value, both data strobes, and the function code. The host
+logs each access as the core makes it; function codes are on for the run.
+
+Not compared, on purpose: the data value of an access that an address error
+aborted (AS is never asserted, so no data moves; the corpus records
+whatever MAME's data latch held), and the position of each idle (`n`)
+entry among the accesses (their sum is inside the clock total, and the
+order of every bus access is compared).
+
+### Decisions and notes
+
+- **Trace (corpus issue #2).** The T bit is not stripped. Trace is its own
+  boundary: an instruction that begins with T set completes and `step()`
+  returns; the next `step()` takes the trace exception. The corpus captures
+  `final` before the trace exception, which is exactly the first boundary.
+- **TAS.** The corpus README says its TAS "doesn't properly handle the
+  special 5-cycle TAS read-modify-write timing". The totals the corpus
+  records (memory forms: operand read, 2 internal clocks, write, then the
+  prefetch; 14 clocks for `(An)`) are also what WinUAE's 68000 generator
+  produces (`gencpu.cpp`, `i_TAS`, `cpu_level == 0`, at WinUAE master
+  `1977af501f6c3389c2eefe119ecb10c82d6582f3`, T2), so all 2,500 TAS cases are
+  compared on clocks too and pass. The per-cycle shape inside the
+  read-modify-write, which the README's remark is about, is below this
+  core's resolution.
+- **TRAPV.** The README's "strange issue" did not show: all 2,500 cases
+  pass, including the taken trap, whose refill read is made after S is set
+  (program space FC 6).
+- **Address errors** are 60% of many files' cases, because the corpus's
+  address registers are random. Everything that makes them pass is a rule
+  the corpus records (T3) and [undocumented-behavior](undocumented-behavior.md)
+  now states: the stacked PC, the IR and access-information words, the
+  halfway flags of a long, when (An)+ and -(An) move, and the clock cost.
 
 ## The tier rule
 
@@ -26,10 +97,10 @@ until someone runs the same case on silicon.
 
 | Oracle | Tier | License | Pin | Coverage | Status here |
 | --- | --- | --- | --- | --- | --- |
-| flamewing/68k-bcd-verifier | T1 | GPL-3.0 | `39a01be528b0744302bf1dc9b3463fc22a3fc45f` (2018-08-31) | ABCD, SBCD, NBCD: all inputs, all flags | Not fetched; ROM needs the AS assembler; the tables are in the source |
+| flamewing/68k-bcd-verifier | T1 | GPL-3.0 | `39a01be528b0744302bf1dc9b3463fc22a3fc45f` (2018-08-31) | ABCD, SBCD, NBCD: all inputs, all flags | **Gate: all 525,312 inputs agree** (generator run locally, table hashed) |
 | transistorfet/68k-test-runner | T1 (tiny) | GPL-3.0 | `5b10d9f68a3f4370e02f5bda8afd28d2a86e69e7` (2023-06-12) | ASL.b, ASR.b of the 2023 Harte corpus on a real 68000 board | Not fetched; evidence only |
 | WinUAE `cputest` and its 68000 core | T2 | GPL-2.0+ | `tonioni/WinUAE` master (not pinned; pin when used) | Integer instructions, undefined flags, address/bus error frames, cycle counts (7 MHz Amiga) | Not fetched; needs a Windows build and an Amiga |
-| SingleStepTests/m68000 | T3 (microcode-derived) | MIT | `64b253116a3de04aaac4346c43680960dc9b67e5` (2024-08-01) | 127 files, 317,500 cases, registers + RAM + prefetch + bus transactions + cycles | **Fetched and counted** |
+| SingleStepTests/m68000 | T3 (microcode-derived) | MIT | `64b253116a3de04aaac4346c43680960dc9b67e5` (2024-08-01) | 127 files, 317,500 cases, registers + RAM + prefetch + bus transactions + cycles | **Gate: 317,500 / 317,500** |
 | MAME 0.285 microcoded 68000 | T3 (microcode-derived) | BSD-3-Clause core in GPL-2.0+ MAME | `mame0285` = `3bd358f74ce504be519247ac9eddff4d6b46cb70`; `/usr/games/mame` 0.285 | Whole-game traces, see [mame-oracle](mame-oracle.md) | **Trace run verified** |
 | SingleStepTests/680x0 (Harte) | T3 | **none** (issue #1 open) | `e0d5ece9670205cc84a0101081837deb446f86a3` (2024-05-14) | 124 files, 1,000,060 cases, registers + RAM + prefetch + transactions + cycles | **Fetched and counted**, detector only |
 | Musashi | T3 | MIT | `313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd` (2026-03-08) | Reference reading for undefined-flag choices | Not fetched |
@@ -222,20 +293,19 @@ nxp.com, cited by section in [start-here](start-here.md) and
 behavior, silent or "undefined" on the rest, and known to carry
 typographical errors in the timing tables. Not an oracle tier.
 
-## Certification ladder (planned)
+## Certification ladder
 
-In the order the [handoff brief](handoff-brief.md) prescribes:
+In the order the [handoff brief](handoff-brief.md) prescribes, with status:
 
-1. BCD tables (T1): `ABCD`, `SBCD`, `NBCD` over all inputs.
-2. SingleStepTests/m68000 (T3, microcode): 127 files, 317,500 cases,
-   registers, SR, USP/SSP, RAM words, prefetch pair, cycle total, and the
-   transaction list in order with kinds, addresses, sizes, values, strobes.
-3. MAME trace lockstep (T3): a System 16 game for N million instructions,
-   PC/SR/registers per instruction.
-4. SingleStepTests/680x0 (T3): as a detector, expecting and explaining the
-   known-bad cases.
-5. WinUAE `cputest` on real hardware (T2→T1 for the covered cases): when an
-   Amiga is available.
+1. SingleStepTests/m68000, rung-1 files (NOP, MOVEQ, Bcc, RTS, MOVE): pass.
+2. BCD tables (T1): pass.
+3. SingleStepTests/m68000 (T3, microcode), all 127 files: pass, no exclusions.
+4. MAME trace lockstep (T3): a System 16 game and a Mega Drive game, N
+   million instructions, registers per instruction: see the worklog.
+5. SingleStepTests/680x0 (T3) as a detector: see the worklog.
+6. Interrupts and STOP scenarios: see the worklog.
+7. WinUAE `cputest` on real hardware (T2 to T1 for the covered cases): when
+   an Amiga is available.
 
 A claim without the pins in the summary table is not reproducible; state
 them.
