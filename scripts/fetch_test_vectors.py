@@ -166,7 +166,13 @@ def fetch_680x0() -> None:
         _download(url, archive)
         _extract(archive, H680X0_SOURCE_DIRECTORY, target, ".json.gz")
     (target / "REVISION").write_text(H680X0_REVISION + "\n")
-    _report("SingleStepTests/680x0", H680X0_REVISION, target / "68000" / "v1", ".json.gz", count_gz_cases)
+    _report(
+        "SingleStepTests/680x0",
+        H680X0_REVISION,
+        target / "68000" / "v1",
+        ".json.gz",
+        count_gz_cases,
+    )
 
 
 def _report(name: str, revision: str, directory: Path, suffix: str, counter) -> None:
@@ -183,9 +189,13 @@ def _report(name: str, revision: str, directory: Path, suffix: str, counter) -> 
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--files", help="comma-separated m68000 file names for a sparse fetch")
-    parser.add_argument("--with-680x0", action="store_true", help="also fetch the Harte 680x0 corpus")
+    parser.add_argument(
+        "--with-680x0", action="store_true", help="also fetch the Harte 680x0 corpus"
+    )
     args = parser.parse_args()
     try:
         fetch_m68000([f.strip() for f in args.files.split(",")] if args.files else None)

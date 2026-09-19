@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "m68000-python"
+version = "0.1.0.dev0"
+description = "Readable, pure-Python Motorola MC68000 instruction-core reference implementation"
+readme = "README.md"
+# The floor is the newest Python PyPy supports (3.11 as of PyPy 7.3.x); raise it when PyPy does.
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "alewman" }]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.15"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/m68000_python"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "C4", "SIM", "PERF", "RUF"]
+# Motorola's register names (D, A, R, SR, PC) are upper case, which ruff
+# mistakes for constants (SIM300) and ambiguous names (E741).
+ignore = ["SIM300", "E741", "SIM109"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["m68000_python"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers -ra"
+pythonpath = ["src", "tests"]
+markers = ["corpus: SingleStepTests/m68000 files (fetched by scripts/fetch_test_vectors.py)"]

@@ -49,3 +49,36 @@ does the logging; function codes are passed only when the host asks).
 (none yet)
 
 ## Log
+
+### Rung 1 (2026-09-19)
+
+- Core skeleton in `src/m68000_python/`: `_core.py` (state, bus, prefetch
+  queue, group 0 and group 1/2 exception entry), `_ea.py`, `_flags.py`,
+  `_dispatch.py` (65,536-entry table built from `RULES`), `_control.py`,
+  `_loads.py`, `disasm.py`; `tests/corpus.py` (direct `.json.bin` parser
+  and the 680x0 JSON adapter), `tests/harness.py`, `scripts/run_corpus.py`.
+- Decoder: 45,815 defined first words plus ILLEGAL, 4,096 line A, 4,096
+  line F, 11,529 illegal. Checked word for word against MAME 0.285's
+  `m68000.lst` (tag `mame0285`, fetched to a scratch directory): the set of
+  defined words and the family of every word agree (a scratch script, not
+  committed, because the `.lst` is MAME's).
+- **T bit decision (corpus issue #2):** trace is modelled as its own
+  boundary. An instruction that starts with T set runs to completion and
+  `step()` returns; the next `step()` takes the trace exception. The
+  corpus captures `final` before the trace exception, so no stripping of
+  T is needed and none is done.
+- Corpus comparison (tests/harness.py): registers, USP, SSP, SR, the
+  prefetch address and pair, RAM words, clock total, and the ordered bus
+  accesses with kind, address, size, value, strobes and function code.
+  Not compared: the data value of an aborted (`re`/`we`) access, and the
+  position of idle (`n`) entries (their sum is in the clock total).
+- Result, SingleStepTests/m68000 @ `64b25311`, CPython 3.14.4:
+  NOP, MOVE.q, Bcc, RTS, MOVE.w, MOVE.b, MOVE.l: 2,500/2,500 each
+  (17,500/17,500), transactions matched.
+- What made the address-error cases pass (60% of MOVE cases fault): the
+  stacked PC is the microcode's PC register, which trails the prefetch
+  address and is brought up to it at mode-specific steps (`_commit_pc`);
+  the IR slot and the access-information word carry IRD, which the closing
+  prefetch replaces before its read; a long's flags are set as two word
+  halves, and which half is visible at a faulting first write depends on
+  source and destination. Each is a comment in the code, tier T3.
