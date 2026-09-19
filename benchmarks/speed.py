@@ -17,7 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from m68000_python import M68000CPU  # noqa: E402
+from m68000_python import M68000CPU
 
 PROGRAM = [
     0x41F9, 0x0000, 0x2000,  # lea     $2000.l, A0

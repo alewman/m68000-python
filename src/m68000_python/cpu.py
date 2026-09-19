@@ -158,6 +158,7 @@ class M68000CPU(
         pc = (self._read_program_word(4) << 16) | self._read_program_word(6)
         self._fault_pc = pc
         self._jump_idle(pc)
+        self.clock += self._cycles
         return self._cycles
 
     # -- execution ------------------------------------------------------------
@@ -172,31 +173,32 @@ class M68000CPU(
         instruction in IR runs.
         """
         if self.halted:
+            self.clock += 4
             return 4
         self._cycles = 0
         try:
+            level = self.ipl
             if self._trace_pending:
                 self._trace_pending = False
                 self._opcode = self.ir
                 self._exception(VECTOR_TRACE, self._pc - 4)
-                return self._cycles
-            level = self.ipl
-            if level and (level > (self.SR >> 8) & 7 or (level == 7 and self._nmi_edge)):
+            elif level and (level > (self.SR >> 8) & 7 or (level == 7 and self._nmi_edge)):
                 self._interrupt(level)
-                return self._cycles
-            if self.stopped:
-                return 4
-            opcode = self._opcode = self.ir
-            self._fault_pc = self._pc - 2
-            traced = self.SR & T
-            self._table[opcode](self, opcode)
-            if traced:
-                # Trace follows an instruction that completed, as its own
-                # boundary: the next step takes it (UM 6.3.8).  The corpus's
-                # final states are captured before it (its issue #2).
-                self._trace_pending = True
+            elif self.stopped:
+                self._cycles = 4
+            else:
+                opcode = self._opcode = self.ir
+                self._fault_pc = self._pc - 2
+                traced = self.SR & T
+                self._table[opcode](self, opcode)
+                if traced:
+                    # Trace follows an instruction that completed, as its own
+                    # boundary: the next step takes it (UM 6.3.8).  The corpus's
+                    # final states are captured before it (its issue #2).
+                    self._trace_pending = True
         except GroupZero as fault:
             self._group_zero(fault)
+        self.clock += self._cycles
         return self._cycles
 
     def _interrupt(self, level: int) -> None:
@@ -210,20 +212,50 @@ class M68000CPU(
         if level == 7:
             self._nmi_edge = False
         self.stopped = False
+        self._opcode = self.ir
+        pc = (self._pc - 4) & 0xFFFFFFFF  # the instruction the interrupt came before
+        # Three internal steps: SR copied, S set and T cleared, the mask
+        # raised to the level being taken (UM 6.3.2; MAME 0.285's order).
+        self._cycles += 6
+        saved = self.SR
+        self._set_sr(((saved | S) & ~T & ~IPL_MASK) | (level << 8))
+        self._processing_exception = True
+        sp = self.R[15]
+        self._write_word(sp - 2, pc)
+        # The acknowledge cycle comes between the first push and the rest.
         answer = AUTOVECTOR if self._acknowledge is None else self._acknowledge(level)
+        self._cycles += 4
         if answer == AUTOVECTOR:
             vector = VECTOR_AUTOVECTOR_BASE + level
+            # VPA: the cycle waits for the E clock (CLK/10) as the manual
+            # describes (UM 5.1.4, 6.3.2); the phase is the host's running
+            # clock count, ``clock``, as MAME 0.285's vpa_sync takes it.
+            self._cycles += self._e_clock_wait()
         elif answer == SPURIOUS:
             vector = VECTOR_SPURIOUS
         elif 0 <= answer <= 255:
             vector = answer
         else:
             vector = VECTOR_UNINITIALIZED
-        self._opcode = self.ir
-        saved = self.SR
-        self._cycles += 6  # acknowledge cycle and internal steps: settled by rung 6
-        self._set_sr((saved & ~IPL_MASK) | (level << 8))
-        self._exception(vector, self._pc - 4, saved=saved)
+        self._cycles += 4
+        sp = (sp - 6) & 0xFFFFFFFF
+        self.R[15] = sp
+        self._write_word(sp, saved)
+        self._write_word(sp + 2, pc >> 16)
+        target = self._read_vector(vector)
+        self._jump_idle(target)
+        self._processing_exception = False
+
+    def _e_clock_wait(self) -> int:
+        """Clocks an autovectored acknowledge waits for the E clock.
+
+        MAME 0.285 (m68000.cpp, ``vpa_sync``): with t the clock count at the
+        start of the cycle, the transfer is aligned to the next E-clock
+        period boundary, one period later when fewer than 3 clocks remain.
+        """
+        now = self.clock + self._cycles - 4
+        phase = now % 10
+        return (10 - phase) if phase < 7 else (20 - phase)
 
 
 __all__ = ["AUTOVECTOR", "M68000CPU", "SPURIOUS"]

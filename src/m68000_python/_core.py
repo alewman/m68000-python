@@ -123,7 +123,11 @@ class CoreMixin:
         # copies the address unit into PC (see _commit_pc).
         self._fault_pc = 0
         self._opcode = 0  # the instruction being executed (IRD)
-        self._cycles = 0
+        self._cycles = 0  # clocks of the step in progress
+        #: Clocks run since construction: the sum of every step() and reset().
+        #: The host may set it; only the E-clock phase of an autovectored
+        #: interrupt acknowledge depends on it.
+        self.clock = 0
         # Interrupts, trace and the stopped/halted states (UM 6.3).
         self.ipl = 0  # the level on IPL2-IPL0 as the host last set it
         self._nmi_edge = False  # a 0-to-7 transition not yet taken
