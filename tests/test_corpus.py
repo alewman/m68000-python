@@ -19,13 +19,20 @@ from harness import run_case
 VECTORS = Path(__file__).resolve().parent / "68000_test_vectors" / "m68000" / "v1"
 REVISION = "64b253116a3de04aaac4346c43680960dc9b67e5"
 
-#: Files that pass every case.  Rung 1 of docs/handoff-brief.md.
-GATED = ["NOP", "MOVE.q", "Bcc", "RTS", "MOVE.w", "MOVE.b", "MOVE.l"]
+#: Every file of the pinned corpus: 127 files of 2,500 cases (rung 3).  No
+#: case is excluded (docs/validation.md).
+GATED = sorted(path.name.removesuffix(".json.bin") for path in VECTORS.glob("*.json.bin"))
 
 
 def _available() -> bool:
     revision = VECTORS.parent / "REVISION"
     return revision.exists() and revision.read_text().strip() == REVISION
+
+
+def test_the_whole_corpus_is_gated() -> None:
+    if not _available():
+        pytest.skip("corpus not fetched (scripts/fetch_test_vectors.py)")
+    assert len(GATED) == 127
 
 
 @pytest.mark.corpus

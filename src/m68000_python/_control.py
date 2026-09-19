@@ -86,14 +86,19 @@ class ControlMixin:
             self._extension()
             self._prefetch()
             return
+        # Condition false: the word at the branch target is read whether or
+        # not the count expires, and Dn is written only after that read, so
+        # an odd target faults with Dn unchanged (corpus, T3).
         self._cycles += 2
+        target = (self._pc - 2 + sign_extend_16(self.irc)) & 0xFFFFFFFF
+        self._commit_pc()
         count = (self.R[register] - 1) & 0xFFFF
-        self.R[register] = (self.R[register] & 0xFFFF0000) | count
+        self.irc = self._read_program_word(target)
         if count != 0xFFFF:
-            self._jump((self._pc - 2 + sign_extend_16(self.irc)) & 0xFFFFFFFF)
-            return
-        self._cycles += 2
-        self._extension()
+            self._pc = (target + 2) & 0xFFFFFFFF
+        else:
+            self._extension()  # expired: carry on after the displacement word
+        self.R[register] = (self.R[register] & 0xFFFF0000) | count
         self._prefetch()
 
     def _op_scc(self, opcode: int) -> None:
@@ -165,15 +170,21 @@ class ControlMixin:
         """JSR -- push the return address, PC <- effective address (PRM 4-109; UM Table 8-10)."""
         kind = EA_KIND[opcode & 0x3F]
         target = self._control_address(kind, opcode & 7)
-        returns = self._pc - 2
-        if kind in (DISP, ABSW, PCDISP, ABSL):
-            returns = self._pc
+        # The return address is past the extension words.
+        returns = self._pc - 2 if kind == IND else self._pc
+        if kind in (DISP, ABSW, PCDISP):
             self._cycles += 2
         elif kind in (INDEX, PCINDEX):
-            returns = self._pc
             self._cycles += 6
+        if kind != IND:
+            self._commit_pc()
+        # The target's first word is read before the push, so an odd target
+        # faults with nothing pushed (corpus, T3).
+        target &= 0xFFFFFFFF
+        self.irc = self._read_program_word(target)
+        self._pc = (target + 2) & 0xFFFFFFFF
         self._push_long(returns)
-        self._jump(target)
+        self._prefetch()
 
     def _op_rts(self, opcode: int) -> None:
         """RTS -- PC <- (SP)+ (PRM 4-169; UM Table 8-12: 16 clocks)."""

@@ -162,7 +162,12 @@ class CoreMixin:
             self._read_program_byte_host = read_byte
             self._write_data_word = write_word
             self._write_data_byte = write_byte
-        self._tas_write = tas_write if tas_write is not None else self._write_data_byte
+        if tas_write is None:
+            self._tas_write = self._write_data_byte
+        elif function_codes:
+            self._tas_write = lambda address, value: tas_write(address, value, fc=self._fc(False))
+        else:
+            self._tas_write = tas_write
 
     # -- the stack pointers and the status register --------------------------
 
@@ -260,11 +265,10 @@ class CoreMixin:
     def _write_long_low_first(self, address: int, value: int) -> None:
         """Two word writes, low word (at address + 2) first.
 
-        The order of -(An) destinations and of the pushes that build a stack
-        frame: the microcode decrements toward the high word (corpus, T3).
+        The order of -(An) destinations and of read-modify-write results:
+        the microcode works toward the high word (corpus, T3).  An odd
+        address faults on the first write, at ``address + 2``.
         """
-        if address & 1:
-            raise self._fault(VECTOR_ADDRESS_ERROR, address, True, False)
         self._write_word(address + 2, value)
         self._write_word(address, value >> 16)
 
@@ -375,9 +379,10 @@ class CoreMixin:
     # -- the stack -------------------------------------------------------------
 
     def _push_long(self, value: int) -> None:
+        """Push a long, high word first (BSR, JSR, PEA; corpus, T3)."""
         sp = (self.R[15] - 4) & 0xFFFFFFFF
         self.R[15] = sp
-        self._write_long_low_first(sp, value)
+        self._write_long(sp, value)
 
     def _push_word(self, value: int) -> None:
         sp = (self.R[15] - 2) & 0xFFFFFFFF

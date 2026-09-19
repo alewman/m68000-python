@@ -79,7 +79,9 @@ def _describe(index: int) -> str:
         case %= 262144
         source, rest = divmod(case, 1024)
         destination, rest = divmod(rest, 4)
-        return f"{name} source={source:#04x} destination={destination:#04x} X={rest >> 1} Z={rest & 1}"
+        return (
+            f"{name} source={source:#04x} destination={destination:#04x} X={rest >> 1} Z={rest & 1}"
+        )
     case -= 2 * 262144
     operand, rest = divmod(case, 4)
     return f"NBCD operand={operand:#04x} X={rest >> 1} Z={rest & 1}"

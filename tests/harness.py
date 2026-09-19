@@ -58,9 +58,9 @@ class CorpusHost:
             self.log.append(("w", even, ".b", value << 8, 1, 0, fc))
 
     def tas_write(self, address: int, value: int, fc: int = 0) -> None:
+        # The corpus logs TAS's write half as an ordinary write ("w"); its
+        # kind 3 ("t") does not occur in TAS.json.bin.
         self.write_byte(address, value, fc)
-        _kind, *rest = self.log.pop()
-        self.log.append(("t", *rest))
 
     def address_error(self, address: int, write: bool, fc: int) -> None:
         self.log.append(("we" if write else "re", address & ~1, ".w", None, 1, 1, fc))

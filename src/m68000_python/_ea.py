@@ -110,7 +110,6 @@ class EAMixin:
             self._commit_pc()
             return sign_extend_16(self._extension()) & 0xFFFFFFFF
         if kind == ABSL:
-            self._commit_pc()
             high = self._extension()
             self._commit_pc()
             return ((high << 16) | self._extension()) & 0xFFFFFFFF
@@ -132,6 +131,13 @@ class EAMixin:
             if size == 4:
                 return self._extension_long()
             return self._extension() & MASK[size]
+        return self._ea_fetch(kind, register, size)[1]
+
+    def _ea_fetch(self, kind: int, register: int, size: int) -> tuple[int, int]:
+        """Address and value of a memory operand: the read half of every access.
+
+        PC-relative operands are read in program space (FC 2/6, UM Table 3-2).
+        """
         if size == 4 and kind == POSTINC:
             # A long (An)+ steps An between its two reads (T3): a fault on
             # the first leaves An alone.
@@ -139,16 +145,17 @@ class EAMixin:
             address = R[8 + register]
             high = self._read_word(address)
             R[8 + register] = (address + 4) & 0xFFFFFFFF
-            return (high << 16) | self._read_word(address + 2)
+            return address, (high << 16) | self._read_word(address + 2)
         if size == 4 and kind == PREDEC:
             # A long -(An) does not bring PC up to date, unlike a word (T3).
             self._cycles += 2
             address = (self.R[8 + register] - 4) & 0xFFFFFFFF
             self.R[8 + register] = address
-            return self._read_long(address)
+            return address, self._read_long(address)
+        address = self._ea_address(kind, register, size)
         if kind >= PCDISP:
-            return self._read_program_operand(size, self._ea_address(kind, register, size))
-        return self._read(size, self._ea_address(kind, register, size))
+            return address, self._read_program_operand(size, address)
+        return address, self._read(size, address)
 
     def _write_register(self, register: int, size: int, value: int) -> None:
         """Write the low byte, word or all of a data register (PRM 1.1)."""

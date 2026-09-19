@@ -36,7 +36,7 @@ from m68000_python._core import (
 from m68000_python._dispatch import Handler, build_table
 from m68000_python._ea import EAMixin
 from m68000_python._flags import FlagsMixin
-from m68000_python._loads import LoadsMixin
+from m68000_python._loads import LoadsMixin, MultipleMixin
 from m68000_python._shifts import ShiftsMixin
 from m68000_python._system import SystemMixin
 
@@ -47,6 +47,7 @@ class M68000CPU(
     BitsMixin,
     ControlMixin,
     LoadsMixin,
+    MultipleMixin,
     ShiftsMixin,
     SystemMixin,
     EAMixin,
