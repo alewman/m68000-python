@@ -358,6 +358,11 @@ def compare(board_name: str, rom_path: Path, trace: Path, limit: int | None) -> 
                     cpu.clock = state["clock"]  # resynchronise the phase
                 clock_checked += 1
             previous_clock = state["clock"]
+        if upcoming is None:
+            # MAME logged this line and then stopped (-str) before the
+            # instruction finished: its state is compared, its run is not.
+            count += 1
+            break
         board.pending = list(accesses)
         try:
             pending_clocks = cpu.step()

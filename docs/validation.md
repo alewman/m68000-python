@@ -8,11 +8,16 @@ all five flags), and with **every case** of the pinned, **microcode-derived**
 SingleStepTests/m68000 corpus: 317,500 of 317,500, each compared on
 registers, SR, both stack pointers, the prefetch queue, RAM, the clock total
 and the ordered bus transactions with their function codes. No case is
-excluded. Everything beyond BCD therefore rests on an emulator-derived
-oracle (MAME 0.285's microcode transcription): a strong detector, not a
-hardware judgement. Not yet run: the MAME whole-game lockstep (rung 4), the
-680x0 corpus as a detector (rung 5), and the interrupt scenarios (rung 6);
-see [worklog](worklog.md) for where each stands.
+excluded. Run in lockstep with MAME 0.285 on real game code it matched
+every register before every instruction for 24,595,631 instructions of
+System 16B Altered Beast (every bus write checked, every instruction's clock
+count checked) and 28,249,660 of the Genesis Altered Beast. Against the
+second corpus, SingleStepTests/680x0, 787,660 of 1,000,060 cases agree and
+every disagreement has a named cause, most explained by WinUAE's
+hardware-corrected rules (T2, read from source) and one by a hardware run
+(T1); the stacked PC of operand address errors stays partly open. Beyond
+BCD, the claim rests on emulator-derived oracles (MAME's microcode
+transcription): strong detectors, not a hardware judgement.
 
 ## Certification record
 
@@ -78,6 +83,53 @@ order of every bus access is compared).
   now states: the stacked PC, the IR and access-information words, the
   halfway flags of a long, when (An)+ and -(An) move, and the clock cost.
 
+## Rung 4: MAME 0.285 lockstep on real code
+
+`validation/lockstep.py record BOARD` runs MAME headless with
+`validation/lockstep.lua` (docs/mame-oracle.md's recipe): the debugger's
+`trace` action logs `curpc sr d0-d7 a0-a6 usp sp totalcycles` before every
+instruction, one watchpoint logs every read of a device window, another
+every write. `compare` builds the board around the core, replays the
+watched reads in MAME's order, checks every watched write (address, size,
+value), and before every instruction compares PC, SR, D0-D7, A0-A6, USP and
+SSP, and the clocks since the previous line. The host is the validation
+directory's, not the core's.
+
+| Board (MAME driver) | Program | Instructions identical | Interrupts | Clocks |
+| --- | --- | ---: | ---: | --- |
+| System 16B `altbeast` (sega/segas16b.cpp), 68000 at 10 MHz; only the 256 KB program ROM modelled, every other read replayed and **every write checked** | romset `altbeast` (epr-11907.a7 crc 29e0c3ad, epr-11906.a5 crc 4c9e9cd8), 30 emulated seconds from power-on | **24,595,631** | 1,791 (level 4, autovectored) | every one of 24,593,837 intervals agrees; the other 1,792 contain the driver's `spin_68k_w` stall (20,000 cycles when the i8751 asks) |
+| Genesis `genesis` (sega/megadriv.cpp), 68000 at 7.67 MHz; ROM and 64 KB RAM modelled, Z80 window, I/O and VDP replayed and their writes checked | Altered Beast (USA, Europe) (Rev 2), No-Intro, SHA-1 `38945360d824d2fb9535b4fd7f25b9aa9b32f019`, 40 emulated seconds | **28,249,660** (and the state before the 28,249,661st, where MAME stopped) | 3,788 (levels 4 and 6, autovectored) | 28,181,328 of 28,249,660 agree; the rest, where sampled, are accesses to the Z80 window, which MAME delays by a clock (`before_delay`), and VDP waits: the host's business |
+
+Command lines (in each run's `command.txt`; nothing under
+`validation/mame_runs/` is committed):
+
+```text
+python validation/lockstep.py record altbeast --seconds 30 --tag 30s
+python validation/lockstep.py compare altbeast --tag 30s
+python validation/lockstep.py record genesis "Altered Beast (USA, Europe) (Rev 2).zip" --seconds 40
+python validation/lockstep.py compare genesis "Altered Beast (USA, Europe) (Rev 2).zip"
+```
+
+What the board needed, all of it host, not CPU: on `altbeast` the i8751
+reaches the 68000's bus through the 315-5195 mapper (register 5 transfers;
+the reader drops those accesses), drives the 68000's RESET once during boot
+(partway through an instruction, which an instruction-level core cannot
+reproduce, so the lockstep takes D0-D7/A0-A6/USP from MAME's next line
+after that one reset), and raises IRQ4. On the Genesis the Z80 reaches the
+68000's bus through its bank window (dropped likewise), and the bus drops
+TAS's write-back. Interrupts are recognised where MAME's next line is a
+handler entered with the mask raised; the host then holds that level for
+one step and the core must arrive at the same state.
+
+The first divergences on the way, each diagnosed before the runs were
+extended: the i8751's and Z80's own accesses on the 68000's bus (a lockstep
+host matter), and a PC compared at 24 bits when Genesis code runs at
+`$FFFFxxxx`. None was a core error.
+
+Disassembly: `validation/disasm_vs_mame.py` compares `disasm.py` with
+MAME's disassembler on every distinct instruction these traces ran:
+880 of 880 (altbeast, 4 s) and 3,771 of 3,771 (Genesis).
+
 ## Rung 5: SingleStepTests/680x0 as a detector
 
 `scripts/run_680x0.py` runs all 124 files of the second corpus (Tom
@@ -88,7 +140,7 @@ byte values on byte accesses, no strobes, no record of an aborted access).
 `scripts/classify_680x0.py` sorts every disagreement into a named cause; no
 case falls outside the rules (none is printed as `UNCLASSIFIED`).
 
-**787,660 of 1,000,060 cases agree** (commit `05eeacc`, PyPy 7.3.23, about
+**787,660 of 1,000,060 cases agree** (commit `979c928`, PyPy 7.3.23, about
 2 minutes). The 212,400 others, by cause (a case can have several):
 
 | Cases | Cause | Files | Explained by |
@@ -118,6 +170,27 @@ within 2 clocks, which is why one 2-clock question stays open: for CHK with
 a negative Dn inside the bound, WinUAE always spends 10 internal clocks,
 while MAME's microcode (and the pinned corpus, which this core follows)
 spends 8 when `bound - Dn` overflows 16 bits.
+
+## Rung 6: interrupts and STOP
+
+`tests/test_interrupts.py` (12 scenarios): a level above the mask taken at
+the next boundary, one at or below it held; the frame (PC low, SR, PC high)
+and the new SR; level 7 taken on each 0-to-7 edge regardless of the mask
+and not again while held; acknowledge answering a vector, `AUTOVECTOR`,
+`SPURIOUS` (vector 24) or an out-of-range number (vector 15); trace taken
+before a pending interrupt, which then enters from the trace handler's
+first instruction (UM 6.3.8); interrupt entry clearing T; STOP waiting for a
+level above its new mask and resuming after the STOP; STOP in user mode a
+privilege violation; a traced STOP taking the trace exception; and the
+E-clock phase of the autovector wait.
+
+The claim is "consistent with the manual and with MAME", not verified: the
+MAME lockstep checks the same entry on 1,791 System 16B and 3,788 Genesis
+interrupts (state, the three frame writes on System 16B, the vector), and
+with the clock-carrying trace the entry's clocks agree with MAME's at all
+ten E-clock phases once the acknowledge adds MAME's one clock after VPA
+(`vpa_sync`, `vpa_after` in m68000.cpp): 44 clocks plus 5 to 14 of E-clock
+wait for an autovector, 44 for a vectored acknowledge (UM Table 8-14).
 
 ## The tier rule
 
@@ -341,10 +414,11 @@ In the order the [handoff brief](handoff-brief.md) prescribes, with status:
 1. SingleStepTests/m68000, rung-1 files (NOP, MOVEQ, Bcc, RTS, MOVE): pass.
 2. BCD tables (T1): pass.
 3. SingleStepTests/m68000 (T3, microcode), all 127 files: pass, no exclusions.
-4. MAME trace lockstep (T3): a System 16 game and a Mega Drive game, N
-   million instructions, registers per instruction: see the worklog.
-5. SingleStepTests/680x0 (T3) as a detector: see the worklog.
-6. Interrupts and STOP scenarios: see the worklog.
+4. MAME trace lockstep (T3): 24,595,631 instructions of System 16B Altered
+   Beast and 28,249,660 of Genesis Altered Beast identical.
+5. SingleStepTests/680x0 (T3) as a detector: 787,660 of 1,000,060 agree,
+   every disagreement named; stacked PCs of operand faults partly open.
+6. Interrupts and STOP: 12 scenarios, consistent with the manual and MAME.
 7. WinUAE `cputest` on real hardware (T2 to T1 for the covered cases): when
    an Amiga is available.
 

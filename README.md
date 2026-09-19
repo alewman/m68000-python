@@ -7,16 +7,23 @@ memory space and the devices, the core owns instruction semantics, the
 status register, the prefetch queue, and the exception model, and `step()`
 returns the clock total of what it ran.
 
-**Status: the whole 68000 instruction set, certified against two oracles,
-not yet released.** Against **hardware-captured** values it passes every
-input of flamewing's BCD verifier tables (`ABCD`, `SBCD`, `NBCD`: 525,312
-cases, result and all five flags). Against the pinned, **microcode-derived**
-SingleStepTests/m68000 corpus it passes **317,500 of 317,500** cases, with no
-exclusions, compared on registers, SR, both stack pointers, the prefetch
-queue, RAM, the clock total and every bus access in order with its function
-code. The MAME whole-game lockstep, the second corpus as a detector and the
-interrupt scenarios are in progress ([docs/worklog.md](docs/worklog.md)); the
-certification record with every pin is [docs/validation.md](docs/validation.md).
+**Status: the whole 68000 instruction set, certified up all six rungs of
+the plan, not yet released.** Against **hardware-captured** values it passes
+every input of flamewing's BCD verifier tables (`ABCD`, `SBCD`, `NBCD`:
+525,312 cases, result and all five flags). Against the pinned,
+**microcode-derived** SingleStepTests/m68000 corpus it passes **317,500 of
+317,500** cases with no exclusions, compared on registers, SR, both stack
+pointers, the prefetch queue, RAM, the clock total and every bus access in
+order with its function code. In lockstep with MAME 0.285 it matched every
+register before every instruction of **24.6 million instructions of System
+16B Altered Beast** (every write and every instruction's clocks checked) and
+**28.2 million of Genesis Altered Beast**. Against the second corpus
+(SingleStepTests/680x0) 787,660 of 1,000,060 cases agree and every
+disagreement is sorted into a named cause, most explained by WinUAE's
+hardware-corrected rules. Interrupts and STOP are covered by scenario tests
+consistent with the manual and with MAME. The record, with every pin, is
+[docs/validation.md](docs/validation.md); what was run and what is open is
+[docs/worklog.md](docs/worklog.md).
 
 ## Scope
 
@@ -85,8 +92,10 @@ schedules a frame and never assumes it owns time: `step()` returns clocks and
 the host decides everything else.
 
 Speed, on the loop in `benchmarks/speed.py` (a shared, loaded machine):
-about 0.6 million instructions per second on CPython 3.14 and 22 million on
-PyPy 7.3.23 (the Mega Drive's 68000 runs about 1 million a second).
+about 0.6-0.7 million instructions per second on CPython 3.14 and about 20
+million on PyPy 7.3.23 (the Mega Drive's 68000 runs about 1 million a
+second); on real game code under the lockstep the core is far faster than
+the trace parsing around it.
 
 ## Oracles
 
@@ -115,7 +124,10 @@ src/m68000_python/           the core: _core (bus, prefetch, exceptions), _ea,
                              _flags, _alu, _loads, _bits, _shifts, _bcd,
                              _control, _system, _dispatch (the opcode map),
                              cpu (M68000CPU), disasm
+                             state, debug, trace, console, __main__ (tooling)
 tests/                       corpus reader and harness, the gates, readability
+validation/                  MAME lockstep host and trace reader (rung 4)
+scripts/run_680x0.py         the second corpus as a detector (rung 5)
 scripts/run_corpus.py        run corpus files and print failures
 scripts/fetch_test_vectors.py
 benchmarks/speed.py          instructions per second

@@ -46,7 +46,35 @@ does the logging; function codes are passed only when the host asks).
 
 ## Open questions
 
-(none yet)
+For Aubrey; in each case the conservative choice was taken and the work
+went on.
+
+1. **DBcc with an odd branch target: which PC is stacked?** MAME's
+   microcode (and so the pinned corpus, which the core passes) stacks the
+   instruction's address + 4. WinUAE's generator (T2, read, not run) moves
+   PC to the target and then adds 2, stacking target + 2; CLK (the 680x0
+   corpus) stacks the target. The core follows the gate corpus. Settling it
+   needs a WinUAE run or hardware.
+2. **CHK timing, 8 or 10 clocks** for a negative Dn inside the bound when
+   `bound - Dn` overflows 16 bits: MAME and the corpus say 8, WinUAE 10.
+   WinUAE's cycle claim is only to within 2 clocks, so it does not decide;
+   the core follows the corpus.
+3. **Double bus fault.** The core halts, as UM 5.4.4 says; MAME 0.285
+   takes another address error. No corpus case exercises it.
+4. **Divide-by-zero flags** come from WinUAE's 68000 rule (T2): the m68000
+   corpus has no divide by zero (its issue #3). One 680x0 case agrees with
+   WinUAE's rule and not with CLK.
+5. **Stacked PC of operand address errors vs WinUAE** (123,862 680x0
+   disagreements): consistent with WinUAE where its source was read (JMP,
+   MOVE's rules), not evaluated case by case. The next step that would
+   settle it is to build WinUAE's (or Hatari's) 68000 core standalone and
+   run the 680x0 cases through it as a T2 referee.
+6. **altbeast lockstep resynchronises once**: the i8751 resets the 68000
+   through the mapper partway through an instruction, which an
+   instruction-level core cannot reproduce; after that reset the lockstep
+   copies D0-D7/A0-A6/USP from MAME's next line (PC, SR and SSP come from
+   the core's own reset). Acceptable?
+7. **Nothing pushed, no GitHub repository created**, per the brief.
 
 ## Log
 
@@ -126,3 +154,55 @@ does the logging; function codes are passed only when the host asks).
 - CI: `.github/workflows/ci.yml` runs the fast suite on 3.11-3.14 and
   PyPy, and the corpus gate (fetched once per pin, cached) on 3.14 and
   PyPy. Not run on GitHub: the repository is local only.
+
+### Rung 4 (2026-09-19)
+
+- `validation/lockstep.py` + `lockstep.lua` + `mame_trace.py`: MAME 0.285
+  (`/usr/games/mame`) trace with registers and `totalcycles` per
+  instruction, watched reads replayed, watched writes checked.
+- **System 16B `altbeast`, 30 emulated seconds: 24,595,631 instructions
+  identical**, 1,791 interrupts, 1 reset (i8751-driven), every write
+  checked; clocks agree on all 24,593,837 intervals without the driver's
+  i8751 spin stall. PyPy compare 563 s; MAME record 802 s.
+- **Genesis, Altered Beast (USA, Europe) (Rev 2), 40 emulated seconds:
+  28,249,660 instructions identical**, 3,788 interrupts; 28,181,328 of
+  28,249,660 clock intervals agree, the rest (sampled) Z80-window and VDP
+  wait states. PyPy compare 510 s; MAME record 805 s.
+- First divergences, each diagnosed before extending: the i8751 reset
+  mid-instruction; the i8751's mapper transfers and the Z80's bank-window
+  accesses appearing on the 68000's bus (dropped by the reader); PC
+  compared at 24 bits; the trace's last line (MAME stopped). No core
+  error was found.
+- Disassembler vs MAME's on every distinct traced instruction: 880/880
+  (altbeast, 4 s trace) and 3,771/3,771 (Genesis) after writing DBF as
+  `dbra` and arithmetic immediates signed, as MAME does.
+
+### Rung 5 (2026-09-19)
+
+- `scripts/run_680x0.py`, `scripts/classify_680x0.py`,
+  `tests/harness_680x0.py`. 680x0 corpus @ `e0d5ece9`: **787,660 of
+  1,000,060 agree**; every disagreement classified (none unclassified),
+  table and sources in `docs/validation.md`. Most causes are explained
+  by WinUAE's 68000 rules read from `gencpu.cpp`/`newcpu.cpp`/
+  `newcpu_common.cpp` at `1977af5` (T2), ASR by transistorfet's hardware
+  run (T1, exactly 1,642 ASR.b cases), ASL.b by the corpus's issue #4.
+  Open: stacked PC of operand address errors (not evaluated case by case)
+  and DBcc's (T2 reading disagrees with MAME). Divide-by-zero flags now
+  follow WinUAE.
+
+### Rung 6 (2026-09-19)
+
+- Interrupt entry rebuilt on MAME's order (PC low, acknowledge, SR, PC
+  high) with the E-clock wait of an autovector (`vpa_sync` + 1); the
+  lockstep's clocks agree at all ten phases (1,791 + 3,788 interrupts).
+- `tests/test_interrupts.py`: 12 scenarios. STOP now resumes, on interrupt
+  or trace, at the instruction after it.
+
+### Tooling (2026-09-19)
+
+- `state.py`, `debug.py`, `trace.py`, `console.py`, `__main__.py`,
+  `py.typed`, `attach_bus`, `set_sr`; docs `cpu-state.md`,
+  `debug-session.md`, `trace-schema.md`, `disassembly.md`;
+  `tests/test_tooling.py`.
+- Speed, `benchmarks/speed.py`, load ~40: CPython 3.14.4 741,000
+  instructions/s (5.7 emulated MHz); PyPy 7.3.23 19.3 million/s.
