@@ -129,6 +129,23 @@ class M68000CPU(
 
     # -- external signals -----------------------------------------------------
 
+    def set_sr(self, value: int) -> None:
+        """Write SR as an instruction would: A7 follows S to the other stack pointer.
+
+        Assigning ``SR`` directly changes the bits and nothing else, which is
+        what a state restore wants and a host usually does not.
+        """
+        self._set_sr(value)
+
+    def _next_pc(self) -> int:
+        """The address execution resumes at: what an interrupt or trace stacks.
+
+        At a boundary the queue has read 4 bytes ahead.  STOP leaves the queue
+        as it was (its immediate still in IRC, corpus T3), so a stopped CPU
+        resumes at the prefetch address itself: the instruction after STOP.
+        """
+        return self._pc if self.stopped else (self._pc - 4) & 0xFFFFFFFF
+
     def set_ipl(self, level: int) -> None:
         """Set the interrupt level on IPL2-IPL0 (0 = none, 7 = non-maskable).
 
@@ -181,7 +198,8 @@ class M68000CPU(
             if self._trace_pending:
                 self._trace_pending = False
                 self._opcode = self.ir
-                self._exception(VECTOR_TRACE, self._pc - 4)
+                self._exception(VECTOR_TRACE, self._next_pc())
+                self.stopped = False
             elif level and (level > (self.SR >> 8) & 7 or (level == 7 and self._nmi_edge)):
                 self._interrupt(level)
             elif self.stopped:
@@ -211,9 +229,9 @@ class M68000CPU(
         """
         if level == 7:
             self._nmi_edge = False
-        self.stopped = False
         self._opcode = self.ir
-        pc = (self._pc - 4) & 0xFFFFFFFF  # the instruction the interrupt came before
+        pc = self._next_pc()  # the instruction the interrupt came before
+        self.stopped = False
         # Three internal steps: SR copied, S set and T cleared, the mask
         # raised to the level being taken (UM 6.3.2; MAME 0.285's order).
         self._cycles += 6
@@ -249,13 +267,16 @@ class M68000CPU(
     def _e_clock_wait(self) -> int:
         """Clocks an autovectored acknowledge waits for the E clock.
 
-        MAME 0.285 (m68000.cpp, ``vpa_sync``): with t the clock count at the
-        start of the cycle, the transfer is aligned to the next E-clock
-        period boundary, one period later when fewer than 3 clocks remain.
+        MAME 0.285 (m68000.cpp, ``vpa_sync`` and ``vpa_after``): with t the
+        clock count at the start of the cycle, the transfer is aligned to the
+        next E-clock period boundary, one period later when fewer than 3
+        clocks remain, and one clock is added after it.  The MAME lockstep
+        on System 16B agrees at every phase (docs/validation.md, rung 6).
         """
         now = self.clock + self._cycles - 4
         phase = now % 10
-        return (10 - phase) if phase < 7 else (20 - phase)
+        self.last_acknowledge_phase = phase
+        return ((10 - phase) if phase < 7 else (20 - phase)) + 1
 
 
 __all__ = ["AUTOVECTOR", "M68000CPU", "SPURIOUS"]

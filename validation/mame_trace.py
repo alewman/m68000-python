@@ -12,6 +12,10 @@ Two kinds of line come out of the Lua script in ``lockstep.lua``:
   one word of the 68000's bus on the i8751's behalf (sega/315_5195.cpp):
   that access, if it falls in a watched window, is logged next, and is
   dropped here because the CPU did not make it;
+* ``B value`` and ``Z address``, written when the Genesis's Z80 writes its
+  68000-bank register ($6000) or touches its bank window ($8000-$FFFF),
+  which MAME turns into an access on the 68000's bus at the banked address
+  (sega/megadriv.cpp, ``z80_read_68k_banked_data``); likewise dropped;
 * a read line, ``R address bits value``, written by a watchpoint when the
   instruction running reads a watched (device) address; a write line,
   ``W address bits value``, likewise for a watched write.
@@ -55,7 +59,8 @@ def records(path: str | Path) -> Iterator[tuple[dict[str, int], list[Access]]]:
     current: dict[str, int] | None = None
     reads: list[Access] = []
     mapper = [0] * 16
-    foreign: tuple[str, int] | None = None  # the mapper's own access, expected next
+    bank = 0  # the Genesis Z80's 68000 bank, bits 23-15
+    foreign: tuple[str, int] | None = None  # another master's access, expected next
     with open(path, encoding="utf-8-sig", errors="replace") as handle:
         for line in handle:
             if line.startswith("M "):
@@ -68,12 +73,22 @@ def records(path: str | Path) -> Iterator[tuple[dict[str, int], list[Access]]]:
                     elif register == 5 and value == 2:
                         foreign = ("R", (mapper[7] << 17) | (mapper[8] << 9) | (mapper[9] << 1))
                 continue
+            if line.startswith("B "):
+                values = _hex_fields(line[2:], 1)
+                if values is not None:
+                    bank = ((bank >> 1) | ((values[0] & 1) << 23)) & 0xFF8000
+                continue
+            if line.startswith("Z "):
+                values = _hex_fields(line[2:], 1)
+                if values is not None:
+                    foreign = ("*", bank | (values[0] & 0x7FFF))
+                continue
             if line.startswith(("R ", "W ")):
                 values = _hex_fields(line[2:], 3)
                 if values is None:
                     continue
-                if foreign is not None and (line[0], values[0]) == foreign:
-                    foreign = None  # the i8751's access through the mapper
+                if foreign is not None and foreign[1] == values[0] and foreign[0] in ("*", line[0]):
+                    foreign = None  # another bus master's access, not the CPU's
                     continue
                 if current is not None:
                     reads.append(Access(line[0], *values))

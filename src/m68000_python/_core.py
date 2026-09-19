@@ -135,6 +135,8 @@ class CoreMixin:
         self._processing_exception = False
         self.stopped = False
         self.halted = False
+        #: E-clock phase (clock mod 10) at the last autovectored acknowledge.
+        self.last_acknowledge_phase = 0
 
         self._acknowledge = acknowledge
         self._address_error_hook = address_error

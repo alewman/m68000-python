@@ -22,6 +22,7 @@ or writes is committed: ROMs stay where they are, traces under
 from __future__ import annotations
 
 import argparse
+import collections
 import shutil
 import subprocess
 import sys
@@ -141,6 +142,12 @@ class Genesis(Board):
     driver = "genesis"
     ram_base = 0xE00000
     ram_mask = 0xFFFF
+    # The Z80 reaches the 68000's bus through its bank window; log its bank
+    # register writes and window accesses so the reader can drop them.
+    extra_watch = (
+        "dbg:command('wpset 6000:genesis_snd_z80,100,w,1,{logerror \"B %X\\n\",wpdata; g}')\n"
+        "dbg:command('wpset 8000:genesis_snd_z80,8000,rw,1,{logerror \"Z %X\\n\",wpaddr; g}')"
+    )
 
     def __init__(self, rom: bytes) -> None:
         super().__init__(rom)
@@ -258,9 +265,10 @@ def compare(board_name: str, rom_path: Path, trace: Path, limit: int | None) -> 
     )  # fmt: skip
     cpu.reset()
     count = interrupts = resets = 0
-    clock_checked = clock_mismatches = pending_clocks = 0
+    clock_checked = clock_mismatches = clock_stalls = pending_clocks = 0
     previous_clock: int | None = None
     clock_notes: list[str] = []
+    interrupt_clocks: collections.Counter = collections.Counter()
     started = time.perf_counter()
     history: list[str] = []
     leftover: list[Access] = []
@@ -330,7 +338,17 @@ def compare(board_name: str, rom_path: Path, trace: Path, limit: int | None) -> 
             else:
                 spent = state["clock"] - previous_clock
                 expected = pending_clocks + clocks_here
-                if spent != expected:
+                if clocks_here and spent - expected <= 1000:
+                    # An interrupt entry: record how its clocks compare, by
+                    # the E-clock phase at the acknowledge (rung 6).
+                    interrupt_clocks[(cpu.last_acknowledge_phase, spent - expected)] += 1
+                if spent - expected > 1000:
+                    # The board held the CPU (altbeast: the driver's
+                    # spin_68k_w, 20,000 cycles when the i8751 asks): not an
+                    # instruction's clocks.
+                    clock_stalls += 1
+                    cpu.clock = state["clock"]
+                elif spent != expected:
                     clock_mismatches += 1
                     if len(clock_notes) < 12:
                         clock_notes.append(
@@ -353,7 +371,15 @@ def compare(board_name: str, rom_path: Path, trace: Path, limit: int | None) -> 
             break
     elapsed = time.perf_counter() - started
     if clock_checked:
-        print(f"clocks: {clock_checked - clock_mismatches:,} of {clock_checked:,} intervals agree")
+        agreeing = clock_checked - clock_mismatches - clock_stalls
+        print(
+            f"clocks: {agreeing:,} of {clock_checked:,} intervals agree; "
+            f"{clock_stalls:,} include a board stall of over 1,000 clocks"
+        )
+        if interrupt_clocks:
+            items = sorted(interrupt_clocks.items())
+            shown = ", ".join(f"phase {p}: {d:+d} x{n}" for (p, d), n in items)
+            print(f"    interrupt entries, MAME minus core by E-clock phase: {shown}")
         for note in clock_notes:
             print("   ", note)
     print(
