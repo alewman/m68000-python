@@ -27,7 +27,7 @@ target-version = "py311"
 select = ["E", "W", "F", "I", "UP", "B", "C4", "SIM", "PERF", "RUF"]
 # Motorola's register names (D, A, R, SR, PC) are upper case, which ruff
 # mistakes for constants (SIM300) and ambiguous names (E741).
-ignore = ["SIM300", "E741", "SIM108", "SIM109"]
+ignore = ["SIM300", "E741", "SIM108", "SIM109", "SIM905"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["m68000_python"]

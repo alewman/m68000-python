@@ -239,5 +239,5 @@ Handler = Callable[..., None]
 
 def build_table(cls: type) -> list[Handler]:
     """Return the 65,536 dispatch entries of ``cls``: ``table[opcode](cpu, opcode)``."""
-    handlers = {name: getattr(cls, "_op_" + name, cls._op_unimplemented) for name in set(NAMES)}
+    handlers = {name: getattr(cls, "_op_" + name) for name in set(NAMES)}
     return [handlers[name] for name in NAMES]

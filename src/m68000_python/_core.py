@@ -78,14 +78,6 @@ class BusError(Exception):
     """
 
 
-class Halted(Exception):
-    """Internal: a group 0 exception during group 0 processing (double fault).
-
-    The processor stops until reset (UM 5.4.4); :attr:`M68000CPU.halted`
-    becomes true and every later ``step()`` idles.
-    """
-
-
 class GroupZero(Exception):
     """Internal: an address or bus error aborting the current instruction."""
 
@@ -136,6 +128,7 @@ class CoreMixin:
         self.ipl = 0  # the level on IPL2-IPL0 as the host last set it
         self._nmi_edge = False  # a 0-to-7 transition not yet taken
         self._trace_pending = False
+        self._processing_exception = False
         self.stopped = False
         self.halted = False
 
@@ -154,7 +147,6 @@ class CoreMixin:
             self._write_data_byte = lambda address, value: write_byte(
                 address, value, fc=self._fc(False)
             )
-            self._read_cpu_space = lambda address: read_word(address, fc=FC_CPU_SPACE)
         else:
             self._read_program = read_word
             self._read_data_word = read_word
@@ -422,17 +414,18 @@ class CoreMixin:
             saved = entered
         self._trace_pending = False
         self._cycles += idle
+        # An address or bus error from here on is one "not an instruction"
+        # access: I/N is set in its information word (UM Figure 6-7).
+        self._processing_exception = True
         sp = (self.R[15] - 6) & 0xFFFFFFFF
         self.R[15] = sp
-        self._write_frame_word(sp + 4, pc)
-        self._write_frame_word(sp, saved)
-        self._write_frame_word(sp + 2, pc >> 16)
+        self._write_word(sp + 4, pc)
+        self._write_word(sp, saved)
+        self._write_word(sp + 2, pc >> 16)
         self._fault_pc = pc
         target = self._read_vector(vector)
         self._jump_idle(target)
-
-    def _write_frame_word(self, address: int, value: int) -> None:
-        self._write_word(address, value)
+        self._processing_exception = False
 
     def _read_vector(self, vector: int) -> int:
         address = vector << 2
@@ -453,10 +446,15 @@ class CoreMixin:
         self._cycles += 4 + 4 + 2 + 2
         # The access information word: bits 15-5 are the undefined part and
         # carry IR's (corpus, T3; UM Figure 6-7 marks them undefined), R/W is
-        # bit 4, I/N bit 3 (0 here), and the function code bits 2-0.
+        # bit 4, I/N bit 3 (set when the access was part of exception
+        # processing rather than of an instruction), and the function code.
         information = (
-            (self._opcode & 0xFFE0) | (0 if fault.write else 0x10) | self._fc(fault.program)
+            (self._opcode & 0xFFE0)
+            | (0 if fault.write else 0x10)
+            | (0x08 if self._processing_exception else 0)
+            | self._fc(fault.program)
         )
+        self._processing_exception = False
         saved = self._enter_supervisor()
         self._trace_pending = False
         pc = self._fault_pc
@@ -473,7 +471,8 @@ class CoreMixin:
             target = self._read_vector(fault.vector)
             self._jump_idle(target)
         except GroupZero:
+            # A group 0 fault while processing a group 0 exception: the double
+            # bus fault halts the processor until reset (UM 5.4.4, 6.3.9.1).
+            # MAME 0.285 takes another address error instead; the corpus has
+            # no such case, and the manual is followed (docs/worklog.md).
             self.halted = True
-
-    def _op_unimplemented(self, opcode: int) -> None:
-        raise NotImplementedError(f"{opcode:04X}")
