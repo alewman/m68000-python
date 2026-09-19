@@ -64,11 +64,11 @@ The same shape as the sibling cores, callables rather than subclassing:
 from m68000_python import M68000CPU, AUTOVECTOR
 
 cpu = M68000CPU(read_byte, read_word, write_byte, write_word)
-cpu.reset()                 # SSP and PC from $000000 and $000004
+cpu.reset()  # SSP and PC from $000000 and $000004
 while running:
-    clocks = cpu.step()     # one instruction or one exception entry
-    ...                     # the host advances its devices by `clocks`
-    cpu.set_ipl(level)      # 0-7, between steps
+    clocks = cpu.step()  # one instruction or one exception entry
+    ...  # the host advances its devices by `clocks`
+    cpu.set_ipl(level)  # 0-7, between steps
 ```
 
 The four callables see 24-bit addresses; a word access is always at an even
