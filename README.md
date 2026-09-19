@@ -55,8 +55,8 @@ three times z80-python's size and orders the work by oracle tier.
 
 ## The embedding contract (planned)
 
-The same shape as the sibling cores. A host subclasses the CPU and supplies
-byte and word memory accessors for a 24-bit space, drives the interrupt
+The same shape as the sibling cores. A host passes the CPU byte and word
+memory accessors as callables for a 24-bit space, drives the interrupt
 priority level between steps, and answers the interrupt-acknowledge
 callback; the core never allocates memory, never schedules a frame, and
 never knows what a scanline is. Cycle totals returned by `step()` are the
