@@ -82,3 +82,21 @@ does the logging; function codes are passed only when the host asks).
   prefetch replaces before its read; a long's flags are set as two word
   halves, and which half is visible at a faulting first write depends on
   source and destination. Each is a comment in the code, tier T3.
+
+### Rung 2 (2026-09-19)
+
+- `_bcd.py`: ABCD, SBCD, NBCD with the N/V rule written out from
+  `docs/undocumented-behavior.md` (binary step, per-nibble correction, V
+  when the correction flips bit 7), not copied from the verifier.
+- T1 gate `tests/test_bcd.py`: flamewing/68k-bcd-verifier @
+  `39a01be528b0744302bf1dc9b3463fc22a3fc45f` was cloned to a scratch
+  directory, `bcd-gen.cc` built with g++ 15.2.0 and run; its
+  `data/bcd-table.bin` is 1,050,624 bytes, SHA-256
+  `8432868c9aa93c92574bae48bebd4efb2834e298340eb09530625365b80147e5`.
+  The test runs the core over the same inputs in the same layout and
+  compares hashes (GPL-3.0 data and code are not committed); with
+  `M68000_BCD_TABLE` pointing at the local table it also compared byte
+  for byte. **262,144 ABCD + 262,144 SBCD + 1,024 NBCD cases agree on
+  result and all five flags.** CPython 3.14.4: 0.8 s; PyPy 7.3.23 /
+  Python 3.11.15: see the commit.
+- Corpus: ABCD, SBCD, NBCD 2,500/2,500 each.
