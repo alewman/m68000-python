@@ -37,6 +37,11 @@ class Instruction:
         return 2 * len(self.words)
 
     @property
+    def data(self) -> bytes:
+        """The instruction's bytes, big-endian."""
+        return b"".join(word.to_bytes(2, "big") for word in self.words)
+
+    @property
     def text(self) -> str:
         if not self.operands:
             return self.mnemonic
@@ -236,7 +241,8 @@ def _decode(name: str, opcode: int, reader: _Reader) -> tuple[str, tuple[str, ..
     if name == "dbcc":
         base = reader.pc
         target = (base + _sign_16(reader.word())) & 0xFFFFFFFF
-        return f"db{cc}", (f"D{ry}", f"${target:x}")
+        # DBF is written DBRA, the assembler's name for it, as MAME writes it.
+        return "dbra" if cc == "f" else f"db{cc}", (f"D{ry}", f"${target:x}")
     if name == "scc":
         return f"s{cc}", (reader.ea(ea, 0),)
     if name in ("bra", "bsr", "bcc"):
@@ -296,6 +302,26 @@ def disassemble(read_word: WordReader, address: int) -> Instruction:
     return Instruction(address, (opcode, *reader.words), mnemonic, operands)
 
 
+def disassemble_bytes(data: bytes, address: int = 0) -> Instruction:
+    """Disassemble one instruction from ``data`` (big-endian) placed at ``address``.
+
+    Raises ValueError unless ``data`` holds exactly that one instruction.
+    """
+    if len(data) % 2 or not data:
+        raise ValueError("instruction data must be a non-empty whole number of words")
+    words = {address + i: (data[i] << 8) | data[i + 1] for i in range(0, len(data), 2)}
+
+    def read_word(where: int) -> int:
+        if where not in words:
+            raise ValueError("instruction data is shorter than the instruction")
+        return words[where]
+
+    instruction = disassemble(read_word, address)
+    if instruction.length != len(data):
+        raise ValueError("instruction data is longer than the instruction")
+    return instruction
+
+
 def disassemble_range(read_word: WordReader, start: int, end: int) -> list[Instruction]:
     """Disassemble every instruction from ``start`` up to (not including) ``end``."""
     result = []
@@ -307,4 +333,11 @@ def disassemble_range(read_word: WordReader, start: int, end: int) -> list[Instr
     return result
 
 
-__all__ = ["EA_KIND", "Instruction", "WordReader", "disassemble", "disassemble_range"]
+__all__ = [
+    "EA_KIND",
+    "Instruction",
+    "WordReader",
+    "disassemble",
+    "disassemble_bytes",
+    "disassemble_range",
+]

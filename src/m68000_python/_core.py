@@ -141,7 +141,25 @@ class CoreMixin:
         self._acknowledge = acknowledge
         self._address_error_hook = address_error
         self.function_codes = function_codes
-        if function_codes:
+        self.tas_write = tas_write
+        self.attach_bus(read_byte, read_word, write_byte, write_word)
+
+    def attach_bus(
+        self,
+        read_byte: ReadFunction,
+        read_word: ReadFunction,
+        write_byte: WriteFunction,
+        write_word: WriteFunction,
+    ) -> None:
+        """Give the core its four bus callables (the constructor's; a debugger's wrappers).
+
+        The originals stay readable as ``read_byte``, ``read_word``,
+        ``write_byte`` and ``write_word``.
+        """
+        self.read_byte, self.read_word = read_byte, read_word
+        self.write_byte, self.write_word = write_byte, write_word
+        tas_write = self.tas_write
+        if self.function_codes:
             # Only a host that asks pays for function codes (docs/handoff-brief.md).
             self._read_program = lambda address: read_word(address, fc=self._fc(True))
             self._read_data_word = lambda address: read_word(address, fc=self._fc(False))
@@ -162,7 +180,7 @@ class CoreMixin:
             self._write_data_byte = write_byte
         if tas_write is None:
             self._tas_write = self._write_data_byte
-        elif function_codes:
+        elif self.function_codes:
             self._tas_write = lambda address, value: tas_write(address, value, fc=self._fc(False))
         else:
             self._tas_write = tas_write

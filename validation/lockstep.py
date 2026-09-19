@@ -210,14 +210,14 @@ def load_rom(board: type[Board], path: Path) -> bytes:
     return path.read_bytes()
 
 
-def run_directory(board: str, rom: Path) -> Path:
+def run_directory(board: str, rom: Path, tag: str = "") -> Path:
     stem = "".join(c if c.isalnum() else "_" for c in rom.stem)[:40]
-    return RUNS / f"{board}-{stem}"
+    return RUNS / f"{board}-{stem}{'-' + tag if tag else ''}"
 
 
-def record(board_name: str, rom_path: Path, seconds: float) -> Path:
+def record(board_name: str, rom_path: Path, seconds: float, tag: str = "") -> Path:
     board = BOARDS[board_name](load_rom(BOARDS[board_name], rom_path))
-    directory = run_directory(board_name, rom_path)
+    directory = run_directory(board_name, rom_path, tag)
     if directory.exists():
         shutil.rmtree(directory)
     directory.mkdir(parents=True)
@@ -398,13 +398,14 @@ def main() -> int:
     )
     parser.add_argument("--seconds", type=float, default=10.0)
     parser.add_argument("--limit", type=int)
+    parser.add_argument("--tag", default="", help="keep this run apart from others of the board")
     args = parser.parse_args()
     if args.rom is None:
         args.rom = getattr(BOARDS[args.board], "romset", None)
     if args.action == "record":
-        record(args.board, args.rom, args.seconds)
+        record(args.board, args.rom, args.seconds, args.tag)
         return 0
-    trace = run_directory(args.board, args.rom) / "error.log"
+    trace = run_directory(args.board, args.rom, args.tag) / "error.log"
     return compare(args.board, args.rom, trace, args.limit)
 
 

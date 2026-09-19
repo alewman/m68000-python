@@ -39,6 +39,7 @@ from m68000_python._flags import FlagsMixin
 from m68000_python._loads import LoadsMixin, MultipleMixin
 from m68000_python._shifts import ShiftsMixin
 from m68000_python._system import SystemMixin
+from m68000_python.state import CPUState
 
 
 class M68000CPU(
@@ -107,6 +108,50 @@ class M68000CPU(
         cls = type(self)
         if "_table" not in cls.__dict__:
             cls._table = build_table(cls)
+
+    # -- state capture and restore (docs/cpu-state.md) --------------------------
+
+    def capture_state(self) -> CPUState:
+        """Return an immutable snapshot of all CPU-owned state; no host reads."""
+        R = self.R
+        return CPUState(
+            d=tuple(R[0:8]),
+            a=tuple(R[8:15]),
+            usp=self.usp,
+            ssp=self.ssp,
+            sr=self.SR,
+            pc=(self._pc - 4) & 0xFFFFFFFF,
+            ir=self.ir,
+            irc=self.irc,
+            ipl=self.ipl,
+            nmi_edge=self._nmi_edge,
+            trace_pending=self._trace_pending,
+            stopped=self.stopped,
+            halted=self.halted,
+            clock=self.clock,
+        )
+
+    def restore_state(self, state: CPUState) -> None:
+        """Restore a captured state without touching the host's memory or devices."""
+        if type(state) is not CPUState:
+            raise TypeError("state must be a CPUState")
+        R = self.R
+        R[0:8] = state.d
+        R[8:15] = state.a
+        self.SR = state.sr
+        if state.sr & S:
+            R[15], self._other_sp = state.ssp, state.usp
+        else:
+            R[15], self._other_sp = state.usp, state.ssp
+        self._pc = (state.pc + 4) & 0xFFFFFFFF
+        self.ir = state.ir
+        self.irc = state.irc
+        self.ipl = state.ipl
+        self._nmi_edge = state.nmi_edge
+        self._trace_pending = state.trace_pending
+        self.stopped = state.stopped
+        self.halted = state.halted
+        self.clock = state.clock
 
     # -- the program counter as a programmer sees it --------------------------
 
