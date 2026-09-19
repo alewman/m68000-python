@@ -501,7 +501,7 @@ class ALUMixin:
         dn = (opcode >> 9) & 7
         dividend = self.R[dn]
         if source == 0:
-            self._divide_by_zero()
+            self._divide_by_zero(False, dividend)
             return
         quotient, remainder = divmod(dividend, source)
         self._cycles += divide_unsigned_clocks(dividend, source) - 4
@@ -521,7 +521,7 @@ class ALUMixin:
         dividend = self.R[dn] - 0x100000000 if self.R[dn] & 0x80000000 else self.R[dn]
         divisor = sign_extend_16(source)
         if divisor == 0:
-            self._divide_by_zero()
+            self._divide_by_zero(True, self.R[dn])
             return
         quotient = abs(dividend) // abs(divisor)
         if (dividend < 0) != (divisor < 0):

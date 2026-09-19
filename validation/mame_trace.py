@@ -3,8 +3,9 @@
 Two kinds of line come out of the Lua script in ``lockstep.lua``:
 
 * an instruction line, written by the debugger's ``trace`` action *before*
-  the instruction runs: ``curpc sr d0 .. d7 a0 .. a6 usp sp`` in hex, where
-  ``sp`` is MAME's supervisor stack pointer slot and ``usp`` the user one;
+  the instruction runs: ``curpc sr d0 .. d7 a0 .. a6 usp sp [totalcycles]``
+  in hex, where ``sp`` is MAME's supervisor stack pointer slot, ``usp`` the
+  user one, and ``totalcycles`` (in newer recordings) the CPU's clock count;
 * ``M register value``, written when System 16B's i8751 writes one of the
   315-5195 mapper's first sixteen registers.  The reader keeps a copy of
   them, because writing 1 or 2 to register 5 makes the mapper write or read
@@ -78,12 +79,14 @@ def records(path: str | Path) -> Iterator[tuple[dict[str, int], list[Access]]]:
                     reads.append(Access(line[0], *values))
                 continue
             foreign = None
-            values = _hex_fields(line, len(FIELDS))
+            values = _hex_fields(line, len(FIELDS)) or _hex_fields(line, len(FIELDS) + 1)
             if values is None:
                 continue
             if current is not None:
                 yield current, reads
-            current = dict(zip(FIELDS, values, strict=True))
+            current = dict(zip(FIELDS, values, strict=False))
+            if len(values) > len(FIELDS):
+                current["clock"] = values[-1]
             reads = []
     if current is not None:
         yield current, reads

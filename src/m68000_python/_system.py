@@ -19,7 +19,6 @@ from m68000_python._core import (
     VECTOR_TRAP_BASE,
     VECTOR_TRAPV,
     VECTOR_ZERO_DIVIDE,
-    C,
     N,
     S,
     V,
@@ -70,9 +69,22 @@ class SystemMixin:
         self._prefetch()
         self._exception(VECTOR_TRAPV, self._pc - 4, idle=0, saved=saved)
 
-    def _divide_by_zero(self) -> None:
-        """DIVU/DIVS by zero: vector 5, stacking the next PC (UM 6.3.5; Table 8-14: 38+)."""
-        self.SR &= ~C
+    def _divide_by_zero(self, signed: bool, dividend: int) -> None:
+        """DIVU/DIVS by zero: vector 5, stacking the next PC (UM 6.3.5; Table 8-14: 38+).
+
+        The flags are undefined in PRM.  The pinned corpus has no case (its
+        issue #3); WinUAE's 68000 rule (``divbyzero_special``, T2) is used:
+        DIVS clears N V C and sets Z; DIVU clears V C and sets N and Z from
+        the high word of the dividend (docs/undocumented-behavior.md).
+        """
+        ccr = self.SR & (0xFF00 | X)
+        if signed:
+            ccr |= Z
+        elif dividend & 0x80000000:
+            ccr |= N
+        elif not dividend & 0xFFFF0000:
+            ccr |= Z
+        self.SR = ccr
         self._exception(VECTOR_ZERO_DIVIDE, self._pc - 2, idle=8)
 
     def _op_chk(self, opcode: int) -> None:

@@ -242,6 +242,10 @@ def registers(cpu: M68000CPU) -> dict[str, int]:
     return values
 
 
+def same(ours: dict[str, int], theirs: dict[str, int]) -> bool:
+    return all(ours[k] == theirs[k] for k in FIELDS)
+
+
 def difference(ours: dict[str, int], theirs: dict[str, int]) -> list[str]:
     return [f"{k}: core {ours[k]:X} MAME {theirs[k]:X}" for k in FIELDS if ours[k] != theirs[k]]
 
@@ -254,6 +258,9 @@ def compare(board_name: str, rom_path: Path, trace: Path, limit: int | None) -> 
     )  # fmt: skip
     cpu.reset()
     count = interrupts = resets = 0
+    clock_checked = clock_mismatches = pending_clocks = 0
+    previous_clock: int | None = None
+    clock_notes: list[str] = []
     started = time.perf_counter()
     history: list[str] = []
     leftover: list[Access] = []
@@ -276,7 +283,7 @@ def compare(board_name: str, rom_path: Path, trace: Path, limit: int | None) -> 
             # reset defines only SSP, PC and SR; the other registers keep
             # whatever the aborted instruction had done to them, so they are
             # taken from MAME's next line (the one resynchronisation).
-            if registers(cpu) != state:
+            if not same(registers(cpu), state):
                 print(f"DIVERGENCE before the reset at record {count:,}")
                 return 1
             cpu.reset()
@@ -287,9 +294,11 @@ def compare(board_name: str, rom_path: Path, trace: Path, limit: int | None) -> 
                 cpu.R[8 + index] = after[f"a{index}"]
             cpu.usp = after["usp"]
             resets += 1
+            previous_clock = None
             continue
         ours = registers(cpu)
-        if ours != state:
+        clocks_here = 0
+        if not same(ours, state):
             level = (state["sr"] >> 8) & 7
             if ours["pc"] != state["pc"] and level > ((cpu.SR >> 8) & 7):
                 # MAME took an interrupt here: the board's line, held for one
@@ -298,7 +307,7 @@ def compare(board_name: str, rom_path: Path, trace: Path, limit: int | None) -> 
                 board.pending, leftover = leftover, []
                 cpu.set_ipl(level)
                 try:
-                    cpu.step()
+                    clocks_here += cpu.step()
                 except Divergence as error:
                     print(f"DIVERGENCE in the interrupt before {count:,}: {error}")
                     return 1
@@ -309,15 +318,31 @@ def compare(board_name: str, rom_path: Path, trace: Path, limit: int | None) -> 
         if leftover:
             print(f"DIVERGENCE: instruction {count - 1:,} left accesses unmade: {leftover[:4]}")
             return 1
-        if ours != state:
+        if not same(ours, state):
             print(f"DIVERGENCE before instruction {count:,} at {state['pc']:06X}")
             for line in difference(ours, state):
                 print("   ", line)
             print("    last instructions:", *history[-8:], sep="\n      ")
             return 1
+        if "clock" in state:
+            if previous_clock is None:
+                cpu.clock = state["clock"]  # the E-clock phase follows MAME's count
+            else:
+                spent = state["clock"] - previous_clock
+                expected = pending_clocks + clocks_here
+                if spent != expected:
+                    clock_mismatches += 1
+                    if len(clock_notes) < 12:
+                        clock_notes.append(
+                            f"before {count:,} at {state['pc']:06X}: MAME {spent}, core "
+                            f"{expected} (last {history[-1] if history else '-'})"
+                        )
+                    cpu.clock = state["clock"]  # resynchronise the phase
+                clock_checked += 1
+            previous_clock = state["clock"]
         board.pending = list(accesses)
         try:
-            cpu.step()
+            pending_clocks = cpu.step()
         except Divergence as error:
             print(f"DIVERGENCE in instruction {count:,} at {state['pc']:06X}: {error}")
             return 1
@@ -327,6 +352,10 @@ def compare(board_name: str, rom_path: Path, trace: Path, limit: int | None) -> 
         if limit and count >= limit:
             break
     elapsed = time.perf_counter() - started
+    if clock_checked:
+        print(f"clocks: {clock_checked - clock_mismatches:,} of {clock_checked:,} intervals agree")
+        for note in clock_notes:
+            print("   ", note)
     print(
         f"{board_name} {rom_path.name}: {count:,} instructions identical "
         f"({interrupts:,} interrupts, {resets:,} resets) in {elapsed:.0f} s"
