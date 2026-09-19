@@ -171,7 +171,17 @@ def _decode(name: str, opcode: int, reader: _Reader) -> tuple[str, tuple[str, ..
     ry = opcode & 7
     cc = CONDITION_NAMES[(opcode >> 8) & 0xF].lower()
 
-    if name in ("ori", "andi", "subi", "addi", "eori", "cmpi"):
+    if name in ("subi", "addi", "cmpi"):
+        # Arithmetic immediates print signed, logical ones unsigned (MAME's
+        # get_imm_str_s / get_imm_str_u).
+        if size_bits == 0:
+            immediate = "#" + _signed_hex_8(reader.word())
+        elif size_bits == 1:
+            immediate = "#" + _signed_hex_16(reader.word())
+        else:
+            immediate = "#" + _signed_hex_32(reader.long())
+        return name + suffix, (immediate, reader.ea(ea, size_bits))
+    if name in ("ori", "andi", "eori"):
         immediate = reader.ea(0x3C, size_bits)
         return name + suffix, (immediate, reader.ea(ea, size_bits))
     if name.endswith(("_to_ccr", "_to_sr")) and name[:4] in ("ori_", "andi", "eori"):
@@ -229,7 +239,7 @@ def _decode(name: str, opcode: int, reader: _Reader) -> tuple[str, tuple[str, ..
             return "move", ("USP", f"A{ry}")
         return "move", (f"A{ry}", "USP")
     if name == "stop":
-        return "stop", (f"#${reader.word():x}",)
+        return "stop", ("#" + _signed_hex_16(reader.word()),)
     if name in ("reset", "nop", "rte", "rts", "trapv", "rtr", "illegal"):
         return name, ()
     if name == "chk":

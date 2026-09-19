@@ -241,7 +241,7 @@ def record(board_name: str, rom_path: Path, seconds: float, tag: str = "") -> Pa
 
 
 def registers(cpu: M68000CPU) -> dict[str, int]:
-    values = {"pc": cpu.PC & 0xFFFFFF, "sr": cpu.SR}
+    values = {"pc": cpu.PC, "sr": cpu.SR}
     values.update({f"d{i}": cpu.R[i] for i in range(8)})
     values.update({f"a{i}": cpu.R[8 + i] for i in range(7)})
     values["usp"] = cpu.usp
