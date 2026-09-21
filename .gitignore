@@ -22,3 +22,8 @@ tests/68000_test_vectors/
 validation/mame_runs/
 *.trace
 error.log
+
+# Referee sources (third-party, fetched at pinned commits) and their builds:
+# validation/referees/build_referees.py. Never commit either.
+validation/referees/src/
+validation/referees/build/
