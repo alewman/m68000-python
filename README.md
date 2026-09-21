@@ -25,6 +25,14 @@ consistent with the manual and with MAME. The record, with every pin, is
 [docs/validation.md](docs/validation.md); what was run and what is open is
 [docs/worklog.md](docs/worklog.md).
 
+What that evidence reaches is mapped in [docs/coverage.md](docs/coverage.md):
+the gate executes 38,019 of the 45,815 defined first words, and the suite now
+runs all of them, the rest checked by register-renaming relations the manual
+implies and by manual-derived tests. [docs/mutation.md](docs/mutation.md)
+measures the suite: of 176 seeded mutants it kills 173; two of the three
+survivors are equivalent to the core, and one (the flags after DIVS by zero,
+undefined in the manual) is open.
+
 ## Scope
 
 The MC68000 (and its electrically different, behaviorally identical
@@ -129,6 +137,8 @@ tests/                       corpus reader and harness, the gates, readability
 validation/                  MAME lockstep host and trace reader (rung 4)
 scripts/run_680x0.py         the second corpus as a detector (rung 5)
 scripts/run_corpus.py        run corpus files and print failures
+scripts/coverage_report.py   what the corpora and the suite reach (docs/coverage.md)
+scripts/mutate.py            mutation testing of the suite (docs/mutation.md)
 scripts/fetch_test_vectors.py
 benchmarks/speed.py          instructions per second
 docs/README.md               index of the documents
@@ -136,6 +146,8 @@ docs/start-here.md           the processor primer
 docs/timing.md               cycle tables and host clocks
 docs/undocumented-behavior.md
 docs/validation.md           the certification record; oracles, tiers, pins
+docs/coverage.md             what the evidence reaches, and the open gaps
+docs/mutation.md             what the suite would notice: mutants and survivors
 docs/mame-oracle.md          the MAME trace recipe
 docs/worklog.md              what was run, when, with what result
 docs/handoff-brief.md        the brief for the session that builds the core

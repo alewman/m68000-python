@@ -192,6 +192,32 @@ ten E-clock phases once the acknowledge adds MAME's one clock after VPA
 (`vpa_sync`, `vpa_after` in m68000.cpp): 44 clocks plus 5 to 14 of E-clock
 wait for an autovector, 44 for a vectored acknowledge (UM Table 8-14).
 
+## Coverage and mutation (2026-09-21)
+
+What the gates above reach, and how much a wrong core would have to differ
+before the suite noticed, are measured in [coverage](coverage.md) and
+[mutation](mutation.md). In brief:
+
+- The gate executes 38,019 of the 45,815 defined first words, every value
+  of every field but 125 BRA displacements, and every (size, addressing
+  mode) combination but 18. It never takes vectors 2, 4, 5 or 9, a double
+  fault, an address error during exception processing, a DBcc count-out,
+  or word and long operands at their boundaries.
+- The suite now executes all 45,815. The words the gate misses are covered
+  by manual-derived tests (every Bcc, BRA and MOVEQ word; the 18
+  combinations), by a PRM 2.2 effective-address model (40 words using A7's
+  byte step or only absolute addresses), and by register renaming, a
+  symmetry the manual implies (PRM 2.2): 3,345 of them are renamings of
+  words the gate runs, so the gate's evidence transfers to them.
+- One core bug was found this way and fixed (4206431 test, 8760315 fix): a
+  traced illegal, line A/F or privilege-violating instruction was followed
+  by a trace exception, contrary to UM 6.3.8 (MAME's microcode and WinUAE
+  agree with the manual). No corpus could see it.
+- Of 176 seeded mutants the suite at e3629c1 killed 158; with this
+  session's tests, 173. N7 and M8 are equivalent to the core; D10, the flags
+  after DIVS by zero, is undefined in PRM, absent from both corpora, and
+  open.
+
 ## The tier rule
 
 Oracles are ranked by where their expected values came from:
@@ -419,6 +445,8 @@ In the order the [handoff brief](handoff-brief.md) prescribes, with status:
 5. SingleStepTests/680x0 (T3) as a detector: 787,660 of 1,000,060 agree,
    every disagreement named; stacked PCs of operand faults partly open.
 6. Interrupts and STOP: 12 scenarios, consistent with the manual and MAME.
+   (Coverage and mutation, 2026-09-21: every defined first word executed by
+   the suite; 173 of 176 mutants killed; see [coverage](coverage.md).)
 7. WinUAE `cputest` on real hardware (T2 to T1 for the covered cases): when
    an Amiga is available.
 

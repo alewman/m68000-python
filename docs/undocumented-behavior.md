@@ -205,6 +205,17 @@ exception is taken (its issue #2), so a runner must either strip T before
 comparing or model the exception as a separate boundary. Documented here so
 the runner design in [handoff-brief](handoff-brief.md) is not a surprise.
 
+Which instructions are traced (2026-09-21): an instruction that is never
+executed -- an illegal word, a line 1010 or 1111 word, a privileged
+instruction in user mode -- is not followed by a trace exception, while an
+exception the instruction itself forces (TRAP, TRAPV, CHK, divide by zero)
+is, from the handler's first instruction. The manual states it (UM 6.3.8);
+MAME 0.285's microcode agrees (T3: its illegal, privilege, line A and line F
+states clear the pending trace, from the nanocode's trace-pending bit), and
+so does WinUAE (T2, read: `exception_check_trace` keeps the trace only after
+vectors 5-7 and 32-47). Neither corpus can show it; the core had it wrong
+until 8760315 (docs/worklog.md).
+
 ## Where the truth will live
 
 When the core exists, the order of authority is:

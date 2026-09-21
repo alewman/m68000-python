@@ -9,6 +9,8 @@ sources and the tier of every oracle it leans on.
 | [timing.md](timing.md) | The User's Manual cycle tables restated (Tables 8-1 to 8-14), what prefetch does to them, and the System 16 clocks and interrupt from MAME's driver |
 | [undocumented-behavior.md](undocumented-behavior.md) | DIV/CHK/BCD undefined flags, MOVEM corner cases, odd-address faults, illegal-instruction families, TAS, trace: each with source and tier, `[unverified]` where inferred |
 | [validation.md](validation.md) | Every oracle found, its tier, license, pin, size, coverage, limits and record shape; what was fetched and counted |
+| [coverage.md](coverage.md) | What the evidence reaches: the encodings, behavioural paths and source lines each corpus and the whole suite run; how the 7,796 words the gate never runs are now covered; the gaps that need an oracle this repository does not have |
+| [mutation.md](mutation.md) | Mutation testing of the suite: 176 seeded mutants, the score per area at three points, every survivor and what would settle it |
 | [mame-oracle.md](mame-oracle.md) | Producing 68000 instruction traces from MAME 0.285 headlessly: command line, Lua script, register names, verified output |
 | [handoff-brief.md](handoff-brief.md) | Context, task, milestones with acceptance tests in oracle-tier order, constraints, size estimate, what done looks like |
 
