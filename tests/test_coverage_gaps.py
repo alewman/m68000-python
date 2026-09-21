@@ -848,17 +848,19 @@ def test_the_reset_instruction_calls_the_host_hook_and_changes_nothing_else():
 
 # -- boundary operands, where the corpus's random values never land -----------
 # The gate reaches 3 of 36 (destination class x source class) pairs of ADD at
-# word size and 2 at long size: its operands are random, so 0, 1, all ones,
-# the largest positive and the most negative value almost never occur.  The
+# word size and 2 at long size, and 15 at byte size: its operands are random,
+# so 0, 1, all ones, the largest positive and the most negative value almost
+# never occur at word and long size, and some pairs never at byte size.  The
 # expected flags are PRM Table 3-18's formulas (add_flags, sub_flags above).
 
 BOUNDARY_VALUES = {
+    1: (0x00, 0x01, 0x7F, 0x80, 0xFF),
     2: (0x0000, 0x0001, 0x7FFF, 0x8000, 0xFFFF),
     4: (0x00000000, 0x00000001, 0x7FFFFFFF, 0x80000000, 0xFFFFFFFF),
 }
 
 
-@pytest.mark.parametrize("size", [2, 4])
+@pytest.mark.parametrize("size", [1, 2, 4])
 def test_add_sub_and_cmp_at_every_pair_of_boundary_operands(size):
     """ADD, SUB, CMP on every pair of 0, 1, max positive, min negative, all ones.
 
@@ -867,7 +869,7 @@ def test_add_sub_and_cmp_at_every_pair_of_boundary_operands(size):
     destination.
     """
     cpu, bus = with_vectors()
-    long_bits = 0x0080 if size == 4 else 0x0040
+    size_bits = {1: 0x0000, 2: 0x0040, 4: 0x0080}[size]
     for destination in BOUNDARY_VALUES[size]:
         for source in BOUNDARY_VALUES[size]:
             for base, flags, writes, keeps_x in (
@@ -876,18 +878,18 @@ def test_add_sub_and_cmp_at_every_pair_of_boundary_operands(size):
                 (0xB001, sub_flags, False, True),  # CMP D1,D0
             ):
                 for extend in (0x00, 0x10):
-                    restart(cpu, bus, [base | long_bits, NOP], sr=0x2700 | extend)
+                    restart(cpu, bus, [base | size_bits, NOP], sr=0x2700 | extend)
                     cpu.R[0], cpu.R[1] = destination, source
                     cpu.step()
                     result, n, z, v, c = flags(destination, source, size)
-                    what = (f"{base | long_bits:04X}", f"{destination:#x}", f"{source:#x}")
+                    what = (f"{base | size_bits:04X}", f"{destination:#x}", f"{source:#x}")
                     assert cpu.R[0] == (result if writes else destination), what
                     assert_flags(cpu, n, z, v, c, what)
                     x = extend if keeps_x else (0x10 if c else 0)
                     assert cpu.SR & 0x10 == x, f"{what}: X"
 
 
-@pytest.mark.parametrize("size", [2, 4])
+@pytest.mark.parametrize("size", [1, 2, 4])
 def test_addx_subx_and_negx_at_the_boundaries(size):
     """ADDX, SUBX, NEGX -- X joins the operation and Z is only ever cleared.
 
@@ -897,7 +899,7 @@ def test_addx_subx_and_negx_at_the_boundaries(size):
     follow the ADD and SUB formulas applied to the whole operation.
     """
     cpu, bus = with_vectors()
-    long_bits = 0x0080 if size == 4 else 0x0040
+    size_bits = {1: 0x0000, 2: 0x0040, 4: 0x0080}[size]
     mask = (1 << (8 * size)) - 1
     for destination in BOUNDARY_VALUES[size]:
         for source in BOUNDARY_VALUES[size]:
@@ -908,7 +910,7 @@ def test_addx_subx_and_negx_at_the_boundaries(size):
                         ("ADDX", 0xD101, lambda d, s, x: d + s + x),
                         ("SUBX", 0x9101, lambda d, s, x: d - s - x),
                     ):
-                        restart(cpu, bus, [word | long_bits, NOP], sr=sr)
+                        restart(cpu, bus, [word | size_bits, NOP], sr=sr)
                         cpu.R[0], cpu.R[1] = destination, source
                         cpu.step()
                         exact = operation(destination, source, extend)
@@ -918,7 +920,7 @@ def test_addx_subx_and_negx_at_the_boundaries(size):
                         assert_extended_flags(
                             cpu, name, destination, source, extend, size, z_before, what
                         )
-                restart(cpu, bus, [0x4000 | long_bits, NOP], sr=sr)  # NEGX D0
+                restart(cpu, bus, [0x4000 | size_bits, NOP], sr=sr)  # NEGX D0
                 cpu.R[0] = destination
                 cpu.step()
                 assert cpu.R[0] == (0 - destination - extend) & mask
