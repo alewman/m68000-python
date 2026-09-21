@@ -253,11 +253,15 @@ class M68000CPU(
                 opcode = self._opcode = self.ir
                 self._fault_pc = self._pc - 2
                 traced = self.SR & T
-                self._table[opcode](self, opcode)
                 if traced:
+                    self._untraced = False
+                self._table[opcode](self, opcode)
+                if traced and not self._untraced:
                     # Trace follows an instruction that completed, as its own
-                    # boundary: the next step takes it (UM 6.3.8).  The corpus's
-                    # final states are captured before it (its issue #2).
+                    # boundary: the next step takes it (UM 6.3.8).  An illegal
+                    # or privileged instruction was never executed and is not
+                    # traced (_system._not_executed).  The corpus's final
+                    # states are captured before the trace (its issue #2).
                     self._trace_pending = True
         except GroupZero as fault:
             self._group_zero(fault)

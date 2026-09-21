@@ -132,6 +132,9 @@ class CoreMixin:
         self.ipl = 0  # the level on IPL2-IPL0 as the host last set it
         self._nmi_edge = False  # a 0-to-7 transition not yet taken
         self._trace_pending = False
+        # Set by an instruction that is never executed (illegal, line A/F,
+        # privilege violation): no trace follows it (UM 6.3.8).
+        self._untraced = False
         self._processing_exception = False
         self.stopped = False
         self.halted = False

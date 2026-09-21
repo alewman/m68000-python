@@ -33,9 +33,21 @@ class SystemMixin:
 
     # -- exceptions an instruction raises -----------------------------------
 
+    def _not_executed(self, vector: int) -> None:
+        """The exception for an instruction that is never executed, stacking its address.
+
+        Illegal words, the line 1010 and 1111 words, and privileged
+        instructions in user mode are not executed, so no trace exception
+        follows them even when T was set (UM 6.3.8; MAME 0.285's microcode
+        clears the pending trace in these four states, T3; WinUAE keeps it
+        only after vectors 5-7 and 32-47, T2).  step() reads ``_untraced``.
+        """
+        self._exception(vector, self._pc - 4)
+        self._untraced = True
+
     def _privilege_violation(self) -> None:
         """Vector 8, stacking the address of the offending instruction (UM 6.3.7)."""
-        self._exception(VECTOR_PRIVILEGE, self._pc - 4)
+        self._not_executed(VECTOR_PRIVILEGE)
 
     def _op_illegal(self, opcode: int) -> None:
         """ILLEGAL -- take the illegal-instruction exception, vector 4 (PRM 4-107; UM 6.3.6).
@@ -44,15 +56,15 @@ class SystemMixin:
         the address of the word itself (corpus, T3; UM 6.3.6 says only
         "similar to that for traps").
         """
-        self._exception(VECTOR_ILLEGAL, self._pc - 4)
+        self._not_executed(VECTOR_ILLEGAL)
 
     def _op_line_a(self, opcode: int) -> None:
         """LINE A -- words $Axxx: the line 1010 emulator exception, vector 10 (UM 6.3.6)."""
-        self._exception(VECTOR_LINE_A, self._pc - 4)
+        self._not_executed(VECTOR_LINE_A)
 
     def _op_line_f(self, opcode: int) -> None:
         """LINE F -- words $Fxxx: the line 1111 emulator exception, vector 11 (UM 6.3.6)."""
-        self._exception(VECTOR_LINE_F, self._pc - 4)
+        self._not_executed(VECTOR_LINE_F)
 
     def _op_trap(self, opcode: int) -> None:
         """TRAP -- exception through vector 32 + n, stacking the next PC (PRM 4-188; UM 6.3.5)."""
