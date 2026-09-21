@@ -692,39 +692,86 @@ def test_a_fault_while_taking_an_address_error_halts_the_processor():
     assert not cpu.halted, "only a reset restarts it"
 
 
-def test_a_bus_error_takes_vector_two_with_the_group_zero_frame():
+#: One program per kind of bus access that can see BERR, all to $90xxxx,
+#: where the host below raises BusError: (name, start, program, read, fc,
+#: faulting address).  Function codes are UM Table 3-2's for supervisor mode.
+BUS_ERROR_ACCESSES = (
+    ("word data read", START, [0x3039, 0x0090, 0x0000, NOP], True, 5, 0x900000),
+    ("word data write", START, [0x33C0, 0x0090, 0x0000, NOP], False, 5, 0x900000),
+    ("byte data read", START, [0x1039, 0x0090, 0x0001, NOP], True, 5, 0x900001),
+    ("byte data write", START, [0x13C0, 0x0090, 0x0001, NOP], False, 5, 0x900001),
+    ("program fetch after JMP", START, [0x4EF9, 0x0090, 0x0000, NOP], True, 6, 0x900000),
+    ("PC-relative byte read", 0x8FF000, [0x103A, 0x0FFF, NOP], True, 6, 0x900001),
+    ("PC-relative word read", 0x8FF000, [0x303A, 0x0FFE, NOP], True, 6, 0x900000),
+)
+
+
+@pytest.mark.parametrize(("name", "start", "program", "read", "fc", "address"), BUS_ERROR_ACCESSES)
+def test_a_bus_error_takes_vector_two_with_the_group_zero_frame(
+    name, start, program, read, fc, address
+):
     """BERR -- vector 2 and the seven-word frame (UM 6.3.9.1, Figure 6-7).
 
-    The host raises :class:`BusError` from a bus callable to assert BERR.
-    Asserted: the vector, R/W, I/N, the function code, the access address,
-    and the saved status register.  The stacked PC and IR are unpredictable
-    (UM 6.2.5) and not asserted.  No corpus models BERR.
+    The host raises :class:`BusError` from a bus callable to assert BERR, on
+    each kind of access in turn.  Asserted: the vector, R/W (bit 4, 1 for a
+    read), I/N (bit 3, clear: the access was the instruction's), the function
+    code (bits 2-0; UM Table 3-2), the access address, and the saved status
+    register.  PC-relative operands are program references (PRM 2.2.11).
+    The stacked PC and IR are unpredictable (UM 6.2.5) and not asserted.  No
+    corpus models BERR.
     """
     bus = Bus()
-    bad = 0x900000
 
-    def read_word(address):
-        if address & 0xFF0000 == bad:
-            raise BusError(address)
-        return bus.read_word(address)
+    def guard(access):
+        def guarded(address, *value):
+            if address & 0xFF0000 == 0x900000:
+                raise BusError(address)
+            return access(address, *value)
+
+        return guarded
 
     bus.set_long(0, STACK)
-    bus.set_long(4, START)
+    bus.set_long(4, start)
     bus.set_long(2 * 4, 0x3000)
     bus.load(0x3000, [NOP] * 4)
-    bus.load(START, [0x3039, 0x0090, 0x0000, NOP])  # MOVE.W $900000.L,D0
-    cpu = M68000CPU(bus.read_byte, read_word, bus.write_byte, bus.write_word)
+    bus.load(start, program)
+    cpu = M68000CPU(
+        guard(bus.read_byte), guard(bus.read_word), guard(bus.write_byte), guard(bus.write_word)
+    )
     cpu.reset()
     cpu.step()
-    assert cpu.PC == 0x3000, "the bus-error handler runs"
+    assert cpu.PC == 0x3000, f"{name}: the bus-error handler runs"
     sp = cpu.R[15]
-    assert sp == STACK - 14, "a seven-word frame"
+    assert sp == STACK - 14, f"{name}: a seven-word frame"
     information = bus.word(sp)
-    assert information & 0x10, "R/W: a read"
-    assert not information & 0x08, "I/N: part of an instruction"
-    assert information & 0x07 == 5, "supervisor data space (UM Table 3-2)"
-    assert bus.long(sp + 2) == bad, "the access address"
-    assert bus.word(sp + 8) == 0x2700, "the status register from before"
+    assert bool(information & 0x10) is read, f"{name}: R/W"
+    assert not information & 0x08, f"{name}: I/N, part of an instruction"
+    assert information & 0x07 == fc, f"{name}: function code"
+    assert bus.long(sp + 2) == address, f"{name}: the access address"
+    assert bus.word(sp + 8) & 0xFF00 == 0x2700, f"{name}: the status register from before"
+
+
+def test_move_long_with_a_zero_low_word_is_not_zero():
+    """MOVE.L -- Z is set only when all 32 bits are zero (PRM 4-116, Table 3-18).
+
+    The core sets a long's flags in two word halves, the low word first; the
+    first half sees a zero low word and sets Z, the second must clear it.  No
+    corpus case moves a long whose low word is zero to memory.
+    """
+    cpu, bus = with_vectors()
+    for destination, program in (
+        ("(A0)", [0x2080, NOP]),
+        ("(A0)+", [0x20C0, NOP]),
+        ("-(A0)", [0x2100, NOP]),
+        ("(d16,A0)", [0x2140, 0x0010, NOP]),
+        ("(xxx).W", [0x21C0, 0x4100, NOP]),
+        ("(xxx).L", [0x23C0, 0x0000, 0x4100, NOP]),
+    ):
+        for value, n, z in ((0x12340000, False, False), (0x80000000, True, False), (0, 0, 1)):
+            restart(cpu, bus, program, sr=0x2700)
+            cpu.R[0], cpu.R[8] = value, 0x4100
+            cpu.step()
+            assert_flags(cpu, bool(n), bool(z), False, False, (destination, hex(value)))
 
 
 def test_reset_loads_the_stack_pointer_and_program_counter_from_the_vectors():
