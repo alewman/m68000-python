@@ -22,29 +22,131 @@
 //   Q                         quit
 // pc is the instruction's own address.  One line per case on stdout:
 //   R <id> exc=<n> pc= sr= r=<d0..a7> usp= ssp= cyc= excyc= trace= frame=
-//   frame1= w=<addr>:<byte>,... flags=
+//   frame1= extra= a=<kind><size>@<addr>,... w=<addr>:<byte>,... flags=
 // exc is the exception the instruction raised (0: none); the registers are
 // those at the moment of the exception (WinUAE's tester never executes the
 // exception itself; it builds the frame separately), frame is the stack
 // frame it builds, frame1 the partial group 1/2 frame when an odd vector
-// turns the exception into an address error.  cyc is the clock count up to
+// turns the exception into an address error, a the instruction's data
+// accesses in order (not its prefetches).  cyc is the clock count up to
 // the exception, excyc the exception's own cost from the tester's hardware
 // side (cputest/main.c getexceptioncycles and check_cycles), which the
 // Amiga run adds before comparing with the measured count.
 
 #define main winuae_cputest_generator_main
 #define my_trim winuae_cputest_my_trim
+// The data-access functions are renamed on the way in and wrapped below, so
+// that the order of the instruction's data accesses can be logged.  The
+// generated core (cpuemu_90_test.cpp) calls the wrappers.
+#define get_byte_test tester_get_byte_test
+#define get_word_test tester_get_word_test
+#define get_long_test tester_get_long_test
+#define put_byte_test tester_put_byte_test
+#define put_word_test tester_put_word_test
+#define put_long_test tester_put_long_test
 #include "cputest.cpp"
+#undef get_byte_test
+#undef get_word_test
+#undef get_long_test
+#undef put_byte_test
+#undef put_word_test
+#undef put_long_test
 #undef my_trim
 #undef main
 
 #include <string>
 #include <vector>
 
-#define REFEREE_TOP 0xfff000
+#define REFEREE_TOP (0x1000000 - EXTRA_RESERVED_SPACE)
+
+// The data accesses of the running instruction, in order: kind (r/w), size
+// (1/2/4) and address.  Prefetches are not logged: the tester's core reads
+// the queue from memory ("no real prefetch") rather than modelling it.
+static std::string referee_accesses;
+static std::vector<uae_u32> referee_touched;
+
+static void log_access(char kind, int size, uaecptr addr)
+{
+	if (testing_active <= 0)
+		return;
+	char b[32];
+	snprintf(b, sizeof b, "%s%c%d@%x", referee_accesses.empty() ? "" : ",", kind, size, addr & 0xffffff);
+	referee_accesses += b;
+}
+
+// The tester's own bus-error check (check_bus_error) compares the full 32-bit
+// address with its bus-error region, because its test addresses never carry
+// an upper byte.  Ours can (address registers are random), and the 68000
+// drives only A23-A1, so an access whose upper byte is set is checked here
+// against the 24-bit address, the same way check_bus_error checks a data
+// access.
+static void referee_bus_check(uaecptr addr, int size, int write)
+{
+	if (testing_active <= 0 || safe_memory_start == 0xffffffff || !(addr & 0xff000000))
+		return;
+	uaecptr a = addr & 0xffffff;
+	if (a + size <= safe_memory_start || a >= safe_memory_end)
+		return;
+	hardware_bus_error_fake = -1;
+	if ((safe_memory_mode & 1) && !write) {
+		hardware_bus_error |= 1;
+		hardware_bus_error_fake |= 1;
+	} else if ((safe_memory_mode & 2) && write) {
+		hardware_bus_error |= 2;
+		hardware_bus_error_fake |= 2;
+	}
+}
+
+// A write the tester aborts with a bus error still lands in its memory array
+// (it only leaves it out of the recorded history), so every written byte is
+// remembered for clearing before the next case.
+static void referee_touch(uaecptr addr, int size)
+{
+	for (int i = 0; i < size; i++)
+		referee_touched.push_back((addr + i) & 0xffffff);
+}
+
+uae_u32 get_byte_test(uaecptr addr)
+{
+	log_access('r', 1, addr);
+	referee_bus_check(addr, 1, 0);
+	return tester_get_byte_test(addr);
+}
+uae_u32 get_word_test(uaecptr addr)
+{
+	log_access('r', 2, addr);
+	referee_bus_check(addr, 2, 0);
+	return tester_get_word_test(addr);
+}
+uae_u32 get_long_test(uaecptr addr)
+{
+	log_access('r', 4, addr);
+	referee_bus_check(addr, 4, 0);
+	return tester_get_long_test(addr);
+}
+void put_byte_test(uaecptr addr, uae_u32 v)
+{
+	log_access('w', 1, addr);
+	referee_bus_check(addr, 1, 1);
+	referee_touch(addr, 1);
+	tester_put_byte_test(addr, v);
+}
+void put_word_test(uaecptr addr, uae_u32 v)
+{
+	log_access('w', 2, addr);
+	referee_bus_check(addr, 2, 1);
+	referee_touch(addr, 2);
+	tester_put_word_test(addr, v);
+}
+void put_long_test(uaecptr addr, uae_u32 v)
+{
+	log_access('w', 4, addr);
+	referee_bus_check(addr, 4, 1);
+	referee_touch(addr, 4);
+	tester_put_long_test(addr, v);
+}
 
 static uae_u8 referee_opcode[OPCODE_AREA + 8];
-static std::vector<uae_u32> referee_touched;
 
 static uae_u8 mem_byte(uae_u32 a) { return test_memory[a & 0xffffff]; }
 static uae_u32 mem_long(uae_u32 a)
@@ -67,7 +169,7 @@ static void referee_init(void)
 	// super-stack regions, and no protected opcode area.  The tester builds
 	// exception frames in EXTRA_RESERVED_SPACE bytes just past the region,
 	// addressed through the 24-bit mask, so the region must end below 16 MB:
-	// an access in the top 4 KB is out of the tester's space and is flagged
+	// an access in the top 1 KB is out of the tester's space and is flagged
 	// (flags=oob) instead of judged.
 	test_memory_start = 0;
 	test_memory_size = REFEREE_TOP;
@@ -240,6 +342,7 @@ static void execute_once(const struct referee_input *in)
 	if (flag_SPCFLAG_TRACE)
 		do_trace();
 	test_opcode = opc;
+	referee_accesses.clear();
 	(*cpufunctbl_noret[opc])(opc);
 	testing_active = 0;
 }
@@ -339,8 +442,10 @@ static void run_case(char *line)
 	out += " frame1=";
 	if (exception_extra_frame_size > 0)
 		hex_bytes(out, exception_extra_frame, exception_extra_frame_size);
-	snprintf(buf, sizeof buf, " extra=%d w=", exception_extra_frame_type);
+	snprintf(buf, sizeof buf, " extra=%d a=", exception_extra_frame_type);
 	out += buf;
+	out += referee_accesses;
+	out += " w=";
 	// Every byte the instruction wrote, with its final value.
 	bool first = true;
 	for (int i = 0; i < ahcnt_current; i++) {

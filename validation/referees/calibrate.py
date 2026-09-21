@@ -9,7 +9,7 @@ A referee is compared only on what it models (docs/referees.md):
 * winuae: the pre-exception view -- exception number, registers, SR, PC,
   the stack frame's fields, memory written, and the clock total (the
   tester's count plus its exception cost).  Cases the tester cannot
-  represent (an access in the top 4 KB, an odd SSP at an exception, a
+  represent (an access in the top 1 KB, an odd SSP at an exception, a
   double fault) are counted as not judged.
 * musashi: the post view -- registers, SR, PC and memory after the step --
   for cases without an address error; clocks are reported apart, as a

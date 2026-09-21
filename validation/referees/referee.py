@@ -111,7 +111,11 @@ class Driver:
         )
 
     def run(self, lines: Iterable[str], batch: int = 4096) -> Iterator[dict]:
-        """Yield one parsed result per case line, in order."""
+        """Yield one parsed result per case line (``C``), in order.
+
+        Other lines (``B`` for a bus-error region) are passed through and
+        answer nothing.
+        """
         lines = list(lines)
         assert self.process.stdin and self.process.stdout
 
@@ -127,7 +131,7 @@ class Driver:
 
         writer = threading.Thread(target=feed, daemon=True)
         writer.start()
-        for _ in lines:
+        for _ in range(sum(line.startswith("C") for line in lines)):
             text = self.process.stdout.readline()
             if not text:
                 raise RuntimeError(f"{self.name} referee exited early")
@@ -164,6 +168,11 @@ def parse_result(text: str) -> dict:
             address, value = pair.split(":")
             writes[int(address, 16)] = int(value, 16)
     result["w"] = writes
+    result["a"] = [
+        (item[0], int(item[1]), int(item.split("@")[1], 16))
+        for item in result.get("a", "").split(",")
+        if item
+    ]
     for key in ("frame", "frame1"):
         if key in result:
             result[key] = bytes.fromhex(result[key])
@@ -369,6 +378,7 @@ def run_core(
         read_byte, read_word = wrap_read(read_byte), wrap_read(read_word)
         write_byte, write_word = wrap_write(write_byte), wrap_write(write_word)
     cpu = M68000CPU(read_byte, read_word, write_byte, write_word, function_codes=True)
+    cpu.referee_log = host.log  # the access log, for callers that compare orders
     r = setup.registers
     for index, name in enumerate(REGISTER_NAMES):
         cpu.R[index] = r[name] & 0xFFFFFFFF
