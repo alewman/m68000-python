@@ -79,6 +79,10 @@ class SystemMixin:
         # therefore read in supervisor program space (corpus, T3).
         saved = self._enter_supervisor()
         self._prefetch()
+        # IR takes IRC, but the decoder keeps TRAPV: a fault while the trap
+        # is processed stacks TRAPV as its IR (WinUAE's CPU tester, run, T2;
+        # MAME 0.285's trpv3 never loads IRD, T3; docs/referees.md).
+        self._opcode = opcode
         self._exception(VECTOR_TRAPV, self._pc - 4, idle=0, saved=saved)
 
     def _divide_by_zero(self, signed: bool, dividend: int) -> None:
