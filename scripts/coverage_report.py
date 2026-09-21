@@ -6,6 +6,7 @@ three views, each a subcommand:
     python scripts/coverage_report.py encodings          # which opcode words run
     python scripts/coverage_report.py paths              # which behaviours run
     python scripts/coverage_report.py lines --limit 200  # which source lines run
+    python scripts/coverage_report.py paths --suite      # ... over the whole test suite
 
 ``encodings`` is static plus one pass over each corpus file's first words: of
 the 45,815 defined opcode words, which are executed as an instruction's own
@@ -138,14 +139,47 @@ def reader_of(which: str):
 # -- the encoding report ------------------------------------------------------
 
 
-def report_encodings(which: str, out) -> None:
-    counts, cases, files = corpus_first_words(which)
+def suite_first_words() -> Counter:
+    """First word -> times executed, over the whole committed test suite.
+
+    Every dispatch-table entry of the real class is wrapped to count the
+    opcode it is called with, then ``pytest tests`` runs: the corpus gate and
+    every hand-written test.  Only instructions count, as in the corpus view.
+    """
+    import pytest
+
+    from m68000_python._dispatch import build_table
+    from m68000_python.cpu import M68000CPU
+
+    counts: Counter = Counter()
+
+    def recording(handler):
+        def run(cpu, opcode):
+            counts[opcode] += 1
+            return handler(cpu, opcode)
+
+        return run
+
+    M68000CPU._table = [recording(handler) for handler in build_table(M68000CPU)]
+    pytest.main(["-q", "-p", "no:cacheprovider", str(ROOT / "tests")])
+    return counts
+
+
+def report_encodings(which: str, out, suite: bool = False) -> None:
+    if suite:
+        counts = suite_first_words()
+        heading = "the whole test suite (python -m pytest tests)"
+        scope = "every test module, the 127-file corpus gate included"
+    else:
+        counts, cases, files = corpus_first_words(which)
+        heading = f"SingleStepTests/{which}"
+        scope = f"{files} files, {cases:,} cases"
     defined = [opcode for opcode in range(0x10000) if NAMES[opcode] not in UNDEFINED]
     executed = {opcode for opcode in counts if NAMES[opcode] not in UNDEFINED}
     undefined_executed = {opcode for opcode in counts if NAMES[opcode] in UNDEFINED}
 
-    print(f"# Encoding coverage: SingleStepTests/{which}", file=out)
-    print(f"\n{files} files, {cases:,} cases.\n", file=out)
+    print(f"# Encoding coverage: {heading}", file=out)
+    print(f"\n{scope}.\n", file=out)
     print(f"defined opcode words              {len(defined):,}", file=out)
     print(f"  executed as a first word        {len(executed):,}", file=out)
     print(f"  never executed                  {len(defined) - len(executed):,}", file=out)
@@ -419,7 +453,7 @@ def operand_class(value: int, size: int) -> str:
 def probed_class(probe: Probe):
     """A subclass of the core that records paths; the core itself is untouched."""
     from m68000_python import M68000CPU
-    from m68000_python._core import S, V
+    from m68000_python._core import AUTOVECTOR, SPURIOUS, S, V
     from m68000_python._ea import EA_KIND, sign_extend_16
 
     class ProbedCPU(M68000CPU):
@@ -472,7 +506,26 @@ def probed_class(probe: Probe):
             probe.hit(f"interrupt:level{level}")
             if level == 7 and self._nmi_edge:
                 probe.hit("nmi:edge")
-            return super()._interrupt(level)
+            host = self._acknowledge
+
+            def acknowledge(requested):
+                # The core's own default when the host gave no callable.
+                answer = AUTOVECTOR if host is None else host(requested)
+                if answer == AUTOVECTOR:
+                    probe.hit("ack:autovector")
+                elif answer == SPURIOUS:
+                    probe.hit("ack:spurious")
+                elif 0 <= answer <= 255:
+                    probe.hit("ack:vector")
+                else:
+                    probe.hit("ack:out-of-range")
+                return answer
+
+            self._acknowledge = acknowledge
+            try:
+                return super()._interrupt(level)
+            finally:
+                self._acknowledge = host
 
         def _op_stop(self, opcode):
             if self.SR & S:
@@ -710,9 +763,42 @@ def run_paths(which: str, probe: Probe, limit: int | None) -> tuple[int, int]:
         harness.M68000CPU = original
 
 
-def report_paths(which: str, probe: Probe, cases: int, files: int, out) -> None:
-    print(f"# Behavioural path coverage: SingleStepTests/{which}", file=out)
-    print(f"\n{files} files, {cases:,} cases run through a probed subclass.\n", file=out)
+def run_paths_suite(probe: Probe) -> str:
+    """Run the whole suite with every ``M68000CPU`` replaced by the probed subclass.
+
+    test_readability.py is left out: it inspects the class's own handlers,
+    and the probe's overrides are not handlers.  Test outcomes are not the
+    point here (a probe override can upset a test that checks identity);
+    only which paths ran is recorded.
+    """
+    import pytest
+
+    import m68000_python
+    import m68000_python.cpu
+
+    probed = probed_class(probe)
+    m68000_python.M68000CPU = probed
+    m68000_python.cpu.M68000CPU = probed
+    pytest.main(
+        [
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            str(ROOT / "tests"),
+            "--ignore",
+            str(ROOT / "tests" / "test_readability.py"),
+        ]
+    )
+    return "the whole test suite but test_readability.py (python -m pytest tests)"
+
+
+def report_paths(which: str, probe: Probe, cases: int, files: int, out, what: str = "") -> None:
+    heading = what or f"SingleStepTests/{which}"
+    print(f"# Behavioural path coverage: {heading}", file=out)
+    if not what:
+        print(f"\n{files} files, {cases:,} cases run through a probed subclass.\n", file=out)
+    else:
+        print("\nEvery CPU the suite builds is the probed subclass.\n", file=out)
     by_category: dict[str, list] = defaultdict(list)
     for category, identifier, description in PATHS:
         by_category[category].append((identifier, description))
@@ -952,7 +1038,7 @@ def main() -> int:
     parser.add_argument("view", choices=("encodings", "paths", "lines"))
     parser.add_argument("--corpus", default="m68000", choices=("m68000", "680x0"))
     parser.add_argument("--limit", type=int, default=None, help="cases per file (default: all)")
-    parser.add_argument("--suite", action="store_true", help="lines: trace the whole test suite")
+    parser.add_argument("--suite", action="store_true", help="measure the whole test suite")
     parser.add_argument("--out", default="-", help="write the report here")
     args = parser.parse_args()
 
@@ -967,7 +1053,11 @@ def main() -> int:
     started = time.perf_counter()
     try:
         if args.view == "encodings":
-            report_encodings(args.corpus, out)
+            report_encodings(args.corpus, out, suite=args.suite)
+        elif args.view == "paths" and args.suite:
+            probe = Probe()
+            what = run_paths_suite(probe)
+            report_paths(args.corpus, probe, 0, 0, out, what=what)
         elif args.view == "paths":
             probe = Probe()
             cases, files = run_paths(args.corpus, probe, args.limit)
