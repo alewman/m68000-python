@@ -683,27 +683,49 @@ def test_no_trace_follows_an_instruction_that_was_not_executed(name, program, sr
     assert cpu.PC == 0x3002, f"{name}: the handler's first instruction ran, no trace exception"
 
 
-def test_an_address_error_inside_exception_processing_sets_i_slash_n():
-    """A fault while taking an exception marks the frame not-an-instruction.
+@pytest.mark.parametrize(
+    ("name", "words", "vector", "instruction"),
+    [
+        ("ILLEGAL (group 1)", [0x4AFC, NOP], 4, False),
+        ("TRAP #0 (group 2)", [0x4E40, NOP], 32, True),
+        ("DIVU D1,D0 by zero (group 2)", [0x80C1, NOP], 5, True),
+    ],
+)
+def test_an_address_error_inside_exception_processing_sets_i_slash_n_for_group_1_only(
+    name, words, vector, instruction
+):
+    """A fault while taking an exception: I/N follows who started the processing.
 
     UM Figure 6-7 and 6.3.9.1: in the group 0 frame's special status word,
     bit 4 is R/W (1 = read), bit 3 is I/N (1 = the cycle was not part of an
     instruction), bits 2-0 the function code; the access address follows.
-    Here TRAP #0's vector points at an odd address, so the first fetch of the
-    handler faults while the trap is still being processed.  Neither corpus
-    reaches it: their vectors are always even.  The stacked PC and IR are not
-    asserted (UM 6.2.5: unpredictable).
+    Here the exception's vector points at an odd address, so the first fetch
+    of the handler faults while the exception is still being processed.
+    Neither corpus reaches it: their vectors are always even.
+
+    The manual does not say whether a group 2 exception's processing, which
+    the instruction itself starts, counts as part of the instruction.
+    WinUAE's CPU-tester core (T2 by running, inside its ODDEXC scope) and MAME
+    0.285's microcode (T3, read: TRAP, TRAPV, CHK and the divide-by-zero trap
+    stack and refill without SSW_N) both clear I/N for group 2 and set it for
+    group 1 (docs/worklog.md question 17, decided 2026-09-21).  This test
+    asserted I/N set for TRAP until then, from a reading of the manual alone.
+    The stacked PC and IR are not asserted (UM 6.2.5: unpredictable).
     """
     cpu, bus = with_vectors(v3=0x3000)
     bus.load(0x3000, [NOP] * 4)
-    bus.set_long(32 * 4, 0x00004001)
-    restart(cpu, bus, [0x4E40, NOP], sr=0x2000)
+    bus.set_long(vector * 4, 0x00004001)
+    restart(cpu, bus, words, sr=0x2000)
+    cpu.R[1] = 0
     cpu.step()
-    assert cpu.PC == 0x3000, "the address-error handler runs"
+    assert cpu.PC == 0x3000, f"{name}: the address-error handler runs"
     information = bus.word(cpu.R[15])
-    assert information & 0x10, "R/W: a read"
-    assert information & 0x08, "I/N: not part of an instruction"
-    assert information & 0x07 == 6, "supervisor program space (UM Table 3-2)"
+    assert information & 0x10, f"{name}: R/W: a read"
+    if instruction:
+        assert not information & 0x08, f"{name}: I/N clear, the instruction started it"
+    else:
+        assert information & 0x08, f"{name}: I/N set, not part of an instruction"
+    assert information & 0x07 == 6, f"{name}: supervisor program space (UM Table 3-2)"
     assert bus.long(cpu.R[15] + 2) == 0x00004001, "the access address"
 
 
