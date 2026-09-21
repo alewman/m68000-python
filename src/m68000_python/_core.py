@@ -299,12 +299,11 @@ class CoreMixin:
         return self._read_long(address)
 
     def _write(self, size: int, address: int, value: int) -> None:
+        """A byte or word write; every long write orders its halves at its caller."""
         if size == 2:
             self._write_word(address, value)
-        elif size == 1:
-            self._write_byte(address, value)
         else:
-            self._write_long(address, value)
+            self._write_byte(address, value)
 
     def _read_program_word(self, address: int) -> int:
         if address & 1:
@@ -402,11 +401,6 @@ class CoreMixin:
         sp = (self.R[15] - 4) & 0xFFFFFFFF
         self.R[15] = sp
         self._write_long(sp, value)
-
-    def _push_word(self, value: int) -> None:
-        sp = (self.R[15] - 2) & 0xFFFFFFFF
-        self.R[15] = sp
-        self._write_word(sp, value)
 
     def _pop_word(self) -> int:
         sp = self.R[15]

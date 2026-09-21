@@ -173,7 +173,8 @@ def test_a_traced_stop_takes_the_trace_exception():
 
 def test_autovector_wait_follows_the_e_clock_phase():
     # MAME 0.285's vpa_sync: the acknowledge aligns to the E clock (CLK/10),
-    # skipping a period when fewer than 3 clocks of this one remain.
+    # skipping a period when fewer than 3 clocks of this one remain, plus one
+    # clock after VPA: 5 to 14 clocks of wait across the ten phases (T3).
     clocks = set()
     for phase in range(10):
         cpu, bus = make([NOP] * 8)
@@ -182,4 +183,4 @@ def test_autovector_wait_follows_the_e_clock_phase():
         cpu.SR = 0x2000
         cpu.set_ipl(1)
         clocks.add(cpu.step())
-    assert clocks == set(range(44 + 4, 44 + 14)) or len(clocks) > 1
+    assert clocks == set(range(44 + 5, 44 + 15))

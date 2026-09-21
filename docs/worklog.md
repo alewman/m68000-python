@@ -88,10 +88,14 @@ Added 2026-09-21 (coverage and mutation session):
    existing test), and a precise one was added beside it
    (`test_mutation_survivors.py::test_autovector_clocks_at_each_e_clock_phase`,
    T3). Should the old one be corrected to `range(49, 59)` or removed?
+   **Resolved 2026-09-21 (Aubrey):** corrected to exactly `range(49, 59)`,
+   the `or` clause dropped.
 9. **Dead code.** `_push_word` in `_core.py` is never called, and the long
    branch of `_write` is never reached (every long write calls
    `_write_long` or `_write_long_low_first` directly). Left in place (no
    change to `src/` except the bug fix). Remove them?
+   **Resolved 2026-09-21 (Aubrey):** removed; `_write` now handles bytes
+   and words only.
 10. **The divide-by-zero flags remain open** (question 4, sharpened):
    mutant D10, which changes the DIVS-by-zero rule, survives the whole suite
    and both corpora -- the 680x0 corpus has one divide by zero, a DIVU, and
