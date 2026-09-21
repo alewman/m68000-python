@@ -9,6 +9,7 @@ list of survivors is the deliverable, and docs/mutation.md is its write-up.
     python scripts/mutate.py list                       # the mutants, by area
     python scripts/mutate.py run --jobs 4 --out R.json  # phase 1: the relevant subset
     python scripts/mutate.py escalate R.json --jobs 4   # phase 2: survivors vs everything
+    python scripts/mutate.py recheck R.json             # phase 3: survivors after new tests
     python scripts/mutate.py detect R.json              # survivors vs the 680x0 detector
     python scripts/mutate.py report R.json              # the tables and the survivors
 
@@ -26,7 +27,9 @@ stated per mutant and recorded in the results:
   only the session's new tests killed: all 127 corpus files plus the same
   fast tests -- the whole suite -- so that what the older suite catches is
   measured against the full gate, not a subset;
-* **detector** (``detect``), for whatever survives phase 2: the matching
+* **phase 3** (``recheck``), after tests were written for the survivors:
+  the phase-2 survivors against the whole suite as it then stands;
+* **detector** (``detect``), for whatever survives the last phase: the matching
   files of the SingleStepTests/680x0 corpus, which is not a gate (212,400 of
   its cases disagree with the core for named reasons, docs/validation.md),
   compared case by case with the unmutated core: a mutant that turns an
@@ -846,6 +849,20 @@ MUTANTS: tuple[Mutant, ...] = (
 
 AREAS = sorted({mutant.area for mutant in MUTANTS})
 
+#: Survivors shown, after the run, to be equivalent to the core on every
+#: observable output, with the argument.  They stay in the population and
+#: count as survivors in the raw score; the report gives both scores.
+EQUIVALENT = {
+    "N7": "EXT.W's result is the sign-extended byte, so its bit 15 equals bit 7 and it "
+    "is zero exactly when the byte is: N and Z of the byte are N and Z of the word "
+    "(checked for all 256 bytes and both X values).",
+    "M8": "every use of the fetch address masks it (the bus to 24 bits; PC, "
+    "capture_state, stacked and pushed PCs, and every PC-relative address to 32), so "
+    "only the private _pc differs, and only after an extension word is taken at "
+    "$FFFFFFFE; six programs straddling the wrap, one taking an address error there, "
+    "gave identical registers, PC, captured state, memory and bus accesses.",
+}
+
 
 # -- applying a mutant -----------------------------------------------------------
 
@@ -1045,7 +1062,7 @@ def main() -> int:
     run.add_argument("--out", default="mutation-results.json")
     run.add_argument("--python", default=str(ROOT / ".venv-pypy" / "bin" / "python"))
     run.add_argument("--work", default=None, help="scratch directory (default: a temp dir)")
-    for name in ("escalate", "detect"):
+    for name in ("escalate", "recheck", "detect"):
         later = sub.add_parser(name)
         later.add_argument("results")
         later.add_argument("--jobs", type=int, default=3)
@@ -1099,6 +1116,14 @@ def main() -> int:
         chosen = [m for m in MUTANTS if m.id in results["phase1"] and needs_escalation(
             results["phase1"][m.id])]  # fmt: skip
         results["phase2"] = run_phase(chosen, "full", args.jobs, args.python, scratch)
+    elif args.command == "recheck":
+        # After tests were written for the survivors: the survivors of phase
+        # 2 against the whole suite as it now stands.
+        out = Path(args.results)
+        results = json.loads(out.read_text())
+        before_recheck = {**results["phase1"], **results.get("phase2", {})}
+        chosen = [m for m in MUTANTS if before_recheck.get(m.id, {}).get("status") == "survived"]
+        results["phase3"] = run_phase(chosen, "full", args.jobs, args.python, scratch)
     else:
         out = Path(args.results)
         results = json.loads(out.read_text())
@@ -1122,7 +1147,7 @@ def needs_escalation(outcome: dict) -> bool:
 
 def run_detector(results: dict, jobs: int, python: str, work_root: Path) -> dict:
     """Run each final survivor's 680x0 files, and the unmutated core's, case by case."""
-    final = {**results["phase1"], **results.get("phase2", {})}
+    final = {**results["phase1"], **results.get("phase2", {}), **results.get("phase3", {})}
     by_id = {mutant.id: mutant for mutant in MUTANTS}
     survivors = [by_id[i] for i, outcome in final.items() if outcome["status"] == "survived"]
     stems = sorted({stem for m in survivors for stem in m.corpus
@@ -1188,80 +1213,119 @@ def kill_sources(outcome: dict) -> set[str]:
 def print_report(results: dict) -> int:
     phase1 = results["phase1"]
     phase2 = results.get("phase2", {})
+    phase3 = results.get("phase3", {})
     by_id = {mutant.id: mutant for mutant in MUTANTS}
+    survivor_tests = {"test_mutation_survivors.py"}
 
-    def final(mutant_id: str) -> str:
-        if mutant_id in phase2:
-            return phase2[mutant_id]["status"]
-        return phase1[mutant_id]["status"]
+    def status(mutant_id: str, *phases: dict) -> str:
+        outcome = phase1[mutant_id]["status"]
+        for phase in phases:
+            if mutant_id in phase:
+                outcome = phase[mutant_id]["status"]
+        return "survived" if outcome == "survived" else "killed"
 
-    def old_suite_kills(mutant_id: str) -> bool:
-        """Killed without the new gap tests, in either phase."""
+    def killed_by(mutant_id: str, allowed) -> bool:
+        """Killed in phase 1 or 2 by a source ``allowed`` accepts."""
         for outcome in (phase1.get(mutant_id, {}), phase2.get(mutant_id, {})):
-            if kill_sources(outcome) - {"new gap tests"}:
+            if outcome.get("status") in ("timeout", "crashed"):
+                return True
+            if any(allowed(source) for source in kill_sources(outcome)):
                 return True
         return False
 
-    print("| Area | Mutants | Killed | Survived | Score | Score without the gap tests |")
-    print("| --- | ---: | ---: | ---: | ---: | ---: |")
-    rows = []
+    def old_suite(mutant_id: str) -> bool:
+        return killed_by(mutant_id, lambda source: source != "new gap tests")
+
+    def with_gap_tests(mutant_id: str) -> bool:
+        return status(mutant_id, phase2) == "killed"
+
+    def now(mutant_id: str) -> bool:
+        return status(mutant_id, phase2, phase3) == "killed"
+
+    columns = [("suite at e3629c1", old_suite), ("+ coverage tests", with_gap_tests)]
+    if phase3:
+        columns.append(("+ survivor tests", now))
+    header = " | ".join(name for name, _ in columns)
+    print(f"| Area | Mutants | {header} | Survivors | Equivalent |")
+    print("| --- | ---: |" + " ---: |" * len(columns) + " --- | --- |")
     for area in [*AREAS, "all"]:
         ids = [m.id for m in MUTANTS if m.id in phase1 and (area == "all" or m.area == area)]
         if not ids:
             continue
-        killed = sum(final(i) in ("killed", "timeout", "crashed") for i in ids)
-        old = sum(old_suite_kills(i) for i in ids)
-        rows.append((area, len(ids), killed, old))
+        cells = []
+        for _, killed in columns:
+            count = sum(killed(i) for i in ids)
+            cells.append(f"{count} ({100 * count / len(ids):.0f}%)")
+        last = columns[-1][1]
+        left = [i for i in ids if not last(i)]
+        equivalent = [i for i in left if i in EQUIVALENT]
         label = f"**{area}**" if area == "all" else area
-        print(
-            f"| {label} | {len(ids)} | {killed} | {len(ids) - killed} | "
-            f"{100 * killed / len(ids):.0f}% | {100 * old / len(ids):.0f}% |"
-        )
+        shown = ", ".join(left) if area != "all" else str(len(left))
+        print(f"| {label} | {len(ids)} | {' | '.join(cells)} | {shown or '-'} | "
+              f"{', '.join(equivalent) if area != 'all' else len(equivalent)} |")  # fmt: skip
     print()
+    total = len(phase1)
+    last = columns[-1][1]
+    killed_now = sum(last(i) for i in phase1)
+    equivalent_left = [i for i in phase1 if not last(i) and i in EQUIVALENT]
+    print(f"Score: {killed_now}/{total} = {100 * killed_now / total:.1f}%; excluding the "
+          f"{len(equivalent_left)} equivalent mutants, {killed_now}/{total - len(equivalent_left)}"
+          f" = {100 * killed_now / (total - len(equivalent_left)):.1f}%.\n")  # fmt: skip
+
     sources: dict[str, int] = {}
     for mutant_id in phase1:
         combined = kill_sources(phase1[mutant_id]) | kill_sources(phase2.get(mutant_id, {}))
-        key = " + ".join(sorted(combined)) or "survived"
+        key = " + ".join(sorted(combined)) or "survived phases 1 and 2"
         sources[key] = sources.get(key, 0) + 1
-    print("Killed by (a mutant can be killed by several):\n")
+    print("What killed each mutant in phases 1 and 2 (a mutant can be killed by several):\n")
     for key, count in sorted(sources.items(), key=lambda item: -item[1]):
         print(f"- {key}: {count}")
     print()
+
     detector = results.get("detector", {})
-    print("Survivors:\n")
-    print("| Id | Area | File | Mutation | Phase 1 subset | Phase 2 | 680x0 detector |")
+    print("Every mutant that survived phase 2:\n")
+    print("| Id | Area | Mutation | Phase 1 subset | Phase 2 | Phase 3 | 680x0 detector |")
     print("| --- | --- | --- | --- | --- | --- | --- |")
     for mutant_id in phase1:
-        if final(mutant_id) != "survived":
+        if status(mutant_id, phase2) != "survived":
             continue
         mutant = by_id[mutant_id]
-        subset = ", ".join(mutant.corpus) or "(no corpus files)"
-        escalated = "survived the whole suite" if mutant_id in phase2 else "not escalated"
+        subset = ", ".join(mutant.corpus) + " + fast tests"
+        if mutant_id in phase3:
+            third = phase3[mutant_id]
+            if third["status"] == "survived":
+                after = "survived"
+            else:
+                modules = sorted(third.get("tests", {}))
+                after = "killed by " + (", ".join(modules) or "the gate")
+        else:
+            after = "not run"
+        if mutant_id in EQUIVALENT:
+            after += " (equivalent)"
         seen = detector.get(mutant_id)
         if seen is None:
             shown = "not run"
         elif not seen.get("files"):
             shown = "no matching file"
         else:
-            shown = (
-                f"{seen['agree_then_disagree']} cases newly disagree, "
-                f"{seen['disagree_then_agree']} newly agree"
-            )
-        print(
-            f"| {mutant_id} | {mutant.area} | `{mutant.file}` | {mutant.what} | "
-            f"{subset} + fast tests | {escalated} | {shown} |"
-        )
+            shown = (f"{seen['agree_then_disagree']} of its cases newly disagree, "
+                     f"{seen['disagree_then_agree']} newly agree")  # fmt: skip
+        print(f"| {mutant_id} | {mutant.area} | {mutant.what} (`{mutant.file}`) | {subset} | "
+              f"survived | {after} | {shown} |")  # fmt: skip
     print()
-    print("Killed only by the new gap tests (the suite at e3629c1 let them through):\n")
+    print("Killed only by the session's new tests (the suite at e3629c1 let them through):\n")
     for mutant_id in phase1:
-        if final(mutant_id) == "survived" or old_suite_kills(mutant_id):
+        if old_suite(mutant_id) or not now(mutant_id):
             continue
         mutant = by_id[mutant_id]
         modules = {**phase1[mutant_id].get("tests", {}), **phase2.get(mutant_id, {}).get(
-            "tests", {})}  # fmt: skip
+            "tests", {}), **phase3.get(mutant_id, {}).get("tests", {})}  # fmt: skip
         names = sorted({node.split("::")[1].split("[")[0] for nodes in modules.values()
                         for node in nodes if "::" in node})  # fmt: skip
         print(f"- {mutant_id} ({mutant.area}): {mutant.what} -- {', '.join(names)}")
+    for mutant_id, reason in EQUIVALENT.items():
+        print(f"\nEquivalent, {mutant_id}: {reason}")
+    del survivor_tests
     return 0
 
 

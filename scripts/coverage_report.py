@@ -741,12 +741,27 @@ def probed_class(probe: Probe):
     return ProbedCPU
 
 
+def host_module(which: str):
+    """The harness module whose host matches the corpus's RAM convention.
+
+    The m68000 corpus's RAM is 16-bit words at even addresses, the 680x0
+    corpus's is bytes (docs/validation.md); each has its own host, and a
+    case run through the other's would read the wrong memory.
+    """
+    if which == "m68000":
+        import harness
+
+        return harness, lambda case: harness.run_case(case, compare_transactions=False)
+    import harness_680x0
+
+    return harness_680x0, harness_680x0.run_case_680x0
+
+
 def run_paths(which: str, probe: Probe, limit: int | None) -> tuple[int, int]:
     """Run every case of one corpus through the probed core; return (cases, files)."""
-    import harness
-
-    original = harness.M68000CPU
-    harness.M68000CPU = probed_class(probe)
+    module, run = host_module(which)
+    original = module.M68000CPU
+    module.M68000CPU = probed_class(probe)
     try:
         cases = files = 0
         for path in sorted(directory_of(which).glob(pattern_of(which))):
@@ -756,11 +771,11 @@ def run_paths(which: str, probe: Probe, limit: int | None) -> tuple[int, int]:
                     break
                 # A crash is still a path the corpus reached.
                 with contextlib.suppress(Exception):
-                    harness.run_case(case, compare_transactions=False)
+                    run(case)
                 cases += 1
         return cases, files
     finally:
-        harness.M68000CPU = original
+        module.M68000CPU = original
 
 
 def run_paths_suite(probe: Probe) -> str:
@@ -940,8 +955,7 @@ def compress(values: list[int]) -> str:
 
 def run_lines(which: str, limit: int | None, suite: bool) -> tuple[dict[str, set[int]], str]:
     """Trace the core's own source lines while running the corpus, or the whole suite."""
-    import harness
-
+    _, run = host_module(which)
     package = str(ROOT / "src" / "m68000_python")
     seen: dict[str, set[int]] = defaultdict(set)
 
@@ -969,7 +983,7 @@ def run_lines(which: str, limit: int | None, suite: bool) -> tuple[dict[str, set
                 if limit is not None and index >= limit:
                     break
                 with contextlib.suppress(Exception):
-                    harness.run_case(case, compare_transactions=False)
+                    run(case)
                 cases += 1
     finally:
         sys.settrace(None)
