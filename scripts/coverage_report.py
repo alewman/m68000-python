@@ -161,6 +161,7 @@ def report_encodings(which: str, out) -> None:
             by_handler_executed[NAMES[opcode]] += 1
     print("\n## Per handler\n", file=out)
     print(f"{'handler':16} {'defined':>8} {'run':>8} {'unrun':>8}  {'%':>5}", file=out)
+
     def unrun(handler: str) -> int:
         return by_handler_executed[handler] - by_handler_defined[handler]
 
@@ -186,8 +187,9 @@ def report_encodings(which: str, out) -> None:
             continue
         run = [opcode for opcode in words if opcode in executed]
         print(f"### {handler}  `{pattern}`", file=out)
-        print(f"    words {len(words):,}  run {len(run):,}  "
-              f"unrun {len(words) - len(run):,}", file=out)
+        print(
+            f"    words {len(words):,}  run {len(run):,}  unrun {len(words) - len(run):,}", file=out
+        )
         for letter, bit_numbers in fields_of(pattern).items():
             seen = {field_value(opcode, bit_numbers) for opcode in run}
             possible = {field_value(opcode, bit_numbers) for opcode in words}
@@ -201,8 +203,9 @@ def report_encodings(which: str, out) -> None:
             else:
                 shown = ", ".join(str(value) for value in missing[:32])
                 more = "" if len(missing) <= 32 else f", ... ({len(missing)} in all)"
-                print(f"    {label}: {len(seen)}/{len(possible)} run; "
-                      f"missing {shown}{more}", file=out)
+                print(
+                    f"    {label}: {len(seen)}/{len(possible)} run; missing {shown}{more}", file=out
+                )
         for line in combinations(pattern, words, set(run)):
             print(f"    {line}", file=out)
         print(file=out)
@@ -238,6 +241,7 @@ def combinations(pattern: str, words: list[int], run: set[int]) -> list[str]:
         axes.append(("size", lambda opcode: {1: "b", 3: "w", 2: "l"}[opcode >> 12]))
     if not axes:
         return []
+
     def key(opcode: int) -> tuple:
         return tuple(axis(opcode) for _name, axis in axes)
 
@@ -300,11 +304,17 @@ PATHS: tuple[tuple[str, str, str], ...] = (
     ("address error", "group0:read:data", "address error on a data read"),
     ("address error", "group0:read:program", "address error on a program read"),
     ("address error", "group0:write:data", "address error on a data write"),
-    ("address error", "group0:write:program", "address error on a program write"
-     " (UNREACHABLE: the 68000 never writes to program space)"),
+    (
+        "address error",
+        "group0:write:program",
+        "address error on a program write (UNREACHABLE: the 68000 never writes to program space)",
+    ),
     ("address error", "group0:in-instruction", "the aborted access belonged to an instruction"),
-    ("address error", "group0:in-exception",
-     "the aborted access belonged to exception processing (I/N set)"),
+    (
+        "address error",
+        "group0:in-exception",
+        "the aborted access belonged to exception processing (I/N set)",
+    ),
     ("address error", "group0:user", "address error taken in user mode"),
     ("address error", "group0:supervisor", "address error taken in supervisor mode"),
     ("mode", "mode:supervisor", "an instruction executed with S set"),
@@ -337,8 +347,11 @@ PATHS: tuple[tuple[str, str, str], ...] = (
     ("branch", "trapv:not-taken", "TRAPV with V clear"),
     ("branch", "chk:above-bound", "CHK with Dn > bound"),
     ("branch", "chk:negative", "CHK with Dn < 0 and within the bound"),
-    ("branch", "chk:negative:idle8",
-     "CHK negative, bound - Dn negative in 16 bits (8 idle clocks)"),
+    (
+        "branch",
+        "chk:negative:idle8",
+        "CHK negative, bound - Dn negative in 16 bits (8 idle clocks)",
+    ),
     ("branch", "chk:negative:idle10", "CHK negative, bound - Dn positive (10 idle clocks)"),
     ("branch", "chk:in-range", "CHK with Dn in range"),
     ("branch", "divu:zero", "DIVU by zero"),
@@ -422,8 +435,10 @@ def probed_class(probe: Probe):
 
         def _group_zero(self, fault):
             probe.hit(f"exception:{fault.vector}")
-            probe.hit(f"group0:{'write' if fault.write else 'read'}:"
-                      f"{'program' if fault.program else 'data'}")
+            probe.hit(
+                f"group0:{'write' if fault.write else 'read'}:"
+                f"{'program' if fault.program else 'data'}"
+            )
             probe.hit(
                 "group0:in-exception" if self._processing_exception else "group0:in-instruction"
             )
@@ -734,8 +749,7 @@ def report_paths(which: str, probe: Probe, cases: int, files: int, out) -> None:
     classes = ("0", "1", "all ones", "max positive", "min negative", "other")
     for (name, size), pairs in sorted(probe.operands.items()):
         reached = [f"{d} x {s}" for d in classes for s in classes if (d, s) in pairs]
-        print(f"{name} size {size}: {len(pairs)}/36 pairs reached: "
-              f"{'; '.join(reached)}", file=out)
+        print(f"{name} size {size}: {len(pairs)}/36 pairs reached: {'; '.join(reached)}", file=out)
     print(file=out)
 
     print("## Shift and rotate counts reached\n", file=out)
@@ -744,9 +758,12 @@ def report_paths(which: str, probe: Probe, cases: int, files: int, out) -> None:
         bits = 8 * size
         missing = sorted(set(range(64)) - counts)
         over = sorted(count for count in counts if count >= bits)
-        print(f"{kind} {direction} size {size}: {len(counts)}/64 counts; "
-              f"counts >= width: {len(over)}; missing "
-              f"{compress(missing) if missing else 'none'}", file=out)
+        print(
+            f"{kind} {direction} size {size}: {len(counts)}/64 counts; "
+            f"counts >= width: {len(over)}; missing "
+            f"{compress(missing) if missing else 'none'}",
+            file=out,
+        )
     print(file=out)
 
     print("## Condition-code inputs reached (condition x CCR nibble)\n", file=out)
@@ -940,8 +957,10 @@ def main() -> int:
     args = parser.parse_args()
 
     if not args.suite and not directory_of(args.corpus).exists():
-        print(f"{directory_of(args.corpus)} not fetched "
-              f"(scripts/fetch_test_vectors.py)", file=sys.stderr)
+        print(
+            f"{directory_of(args.corpus)} not fetched (scripts/fetch_test_vectors.py)",
+            file=sys.stderr,
+        )
         return 2
 
     out = sys.stdout if args.out == "-" else open(args.out, "w")  # noqa: SIM115
