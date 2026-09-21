@@ -206,3 +206,61 @@ went on.
   `tests/test_tooling.py`.
 - Speed, `benchmarks/speed.py`, load ~40: CPython 3.14.4 741,000
   instructions/s (5.7 emulated MHz); PyPy 7.3.23 19.3 million/s.
+
+## Coverage and mutation testing (2026-09-21)
+
+The brief for this session (from Aubrey, 2026-09-21): no exhaustive hardware
+oracle exists for the 68000, so build a web of independent evidence and say
+precisely where it is insufficient.  Task 1, a coverage map of what the
+corpora reach and tests for the gaps the manuals decide; task 2, mutation
+testing of the verification suite, reporting survivors.  Hard rules: no
+change to `src/` to make anything pass, no gate weakened, a core bug gets a
+failing test commit and then a separate fix commit.
+
+### Coverage report (689f18f)
+
+- `scripts/coverage_report.py`, three views: `encodings` (first words
+  executed, per handler, per rule, per field, per (size x EA mode)
+  combination), `paths` (a probed subclass of `M68000CPU` against a declared
+  list of behavioural paths), `lines` (`sys.settrace` over
+  `src/m68000_python` for the corpus or, with `--suite`, the whole suite).
+- Reproduced Aubrey's number: SingleStepTests/m68000 runs **38,019** of the
+  45,815 defined first words; 7,796 never run (move 3,719, bcc 1,888, moveq
+  618).  Every *field value* of every rule is sampled somewhere except 125
+  BRA displacements; what is unrun is combinations, and only 18 (size x
+  mode) combinations are unrun (17 of MOVE, 1 of ADDI), all absolute or
+  PC-relative.  The 680x0 corpus runs 44,736.
+- Paths the gate corpus never reaches: vector 4 (illegal), 5 (divide by
+  zero), 9 (the trace exception itself), bus error, double fault, an address
+  error during exception processing (I/N set), any interrupt, DBcc counting
+  out, MOVEM with an empty or full mask, MULU/MULS by 0/$FFFF/$8000, the DIVU
+  overflow boundary; and word/long operands at 0, 1, all ones, max positive
+  or min negative (3 of 36 pairs for ADD.w, 2 for ADD.l).
+- Timing: `paths` over all 317,500 cases is 7 s on PyPy; `lines` 14 s on
+  CPython 3.14.4 (which runs this core at about 28 microseconds a case
+  without transaction comparison).
+
+### Gap tests (9604270)
+
+- `tests/test_coverage_gaps.py`: 48 tests of what the manuals decide, flag
+  expectations restated from PRM Table 3-18's boolean formulas, never from
+  the core.  Undefined flags, unpredictable stacked PCs and one clock count
+  the manual and the corpus disagree on are left open (docs/coverage.md).
+
+### A core bug, found by the coverage gap (4206431 test, 8760315 fix)
+
+- **Trace after an instruction that was never executed.**  With T set, an
+  ILLEGAL word, an undefined word, a line 1010 or 1111 word, or a privileged
+  instruction in user mode took its exception and then, at the next step, a
+  trace exception.  UM 6.3.8 says no trace follows an instruction that is
+  not executed because it is illegal or privileged; MAME 0.285's microcode
+  (T3: `state_illegal_df`, `state_priviledge_df`, `state_linea_df`,
+  `state_linef_df` clear the pending trace) and WinUAE (T2, read:
+  `exception_check_trace` keeps it only for vectors 5-7 and 32-47) agree.
+  Invisible to both corpora: the gate captures `final` before any trace
+  exception and never compares the pending-trace state, and the 680x0
+  corpus never sets T.
+- 4206431 adds the test, failing in 6 cases; 8760315 routes the four
+  exceptions through `_not_executed`, which marks the step untraced.  The
+  whole suite (395 tests, all 317,500 gate cases) passes after it on CPython
+  3.14.4 and PyPy 7.3.23.
