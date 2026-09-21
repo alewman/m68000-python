@@ -192,8 +192,8 @@ def test_every_defined_word_behaves_as_its_canonical_twin():
     """Register renaming is a symmetry of every defined word (PRM 2.2, Section 4).
 
     45,815 defined words; the ones that are their own canonical twin, and
-    MOVEM, are skipped.  Two random states per word: one in supervisor mode,
-    one drawn at random, so user-mode privilege paths are renamed too.
+    MOVEM, are skipped.  Two random states per word, each in supervisor or
+    user mode at random, so user-mode privilege paths are renamed too.
     """
     bus = JournalBus(seed=68000)
     for vector in range(256):
@@ -219,3 +219,131 @@ def test_every_defined_word_behaves_as_its_canonical_twin():
         compared += 1
     assert not failures, f"{len(failures)} words differ from their twins; first: {failures[:5]}"
     assert compared > 30000
+
+
+# -- the words whose every register field names register 7 ---------------------
+# The canonical twin never renames 7, so a word like MOVE.W D7,-(A7) is its
+# own twin and the test above skips it.  For instructions that use no
+# register but the ones their fields name -- no implicit stack pointer, no
+# exception from supervisor mode with even addresses -- A7 is an ordinary
+# address register, except as the operand of a byte (A7)+ or -(A7), which
+# moves it by two (PRM 2.2.4-2.2.5).  So in those instructions D0 and D7 can
+# be exchanged, and A0 and A7 unless either is such a byte operand.  The byte
+# (A7)+ and -(A7) words themselves are tested against the manual directly
+# (test_coverage_gaps.py, test_byte_moves_through_a7_keep_it_even).
+
+#: Instruction families that name every register they use in their fields.
+PLAIN = {
+    "move", "addi", "subi", "andi", "ori", "eori", "cmpi", "addq", "subq",
+    "add", "sub", "and", "or", "eor", "cmp", "scc", "tst", "clr", "neg", "negx", "not",
+}  # fmt: skip
+#: Extension words for this test: as a brief extension word, D6.L as the index
+#: (D6 is never renamed here); as anything else, the same even value in both.
+EXTENSION_D6 = [0x6804, 0x6808, 0x680C, 0x6810, 0x6814]
+
+
+def banked_fields(opcode: int) -> list[tuple[list[int], str, int]]:
+    """Each register field of a PLAIN word: its bits, its bank (D or A), its mode."""
+    positions = _positions(RULES[_rule_of(opcode)][0])
+    fields = []
+    if "r" in positions:  # ADD, SUB, AND, OR, EOR, CMP: the Dn operand (PRM Section 4)
+        fields.append((positions["r"], "D", 0))
+    mode = (opcode >> 3) & 7
+    if "e" in positions and mode != 7:
+        fields.append((positions["e"][3:], "D" if mode == 0 else "A", mode))
+    if "R" in positions and "M" in positions and (opcode >> 6) & 7 != 7:
+        destination = (opcode >> 6) & 7
+        fields.append((positions["R"], "D" if destination == 0 else "A", destination))
+    return fields
+
+
+def _is_byte(opcode: int) -> bool:
+    if NAMES[opcode] == "move":
+        return opcode >> 12 == 1
+    return NAMES[opcode] == "scc" or (opcode >> 6) & 3 == 0
+
+
+def seven_to_zero_twin(opcode: int) -> tuple[int, bool, bool]:
+    """(twin, D bank swapped, A bank swapped): registers 0 and 7 exchanged where allowed.
+
+    The renaming is the swap 0 <-> 7, so a word naming both keeps its
+    aliasing.  The A bank is swapped only when no byte (An)+ or -(An) field
+    names A0 or A7: the swap would move such an operand onto or off A7,
+    whose byte step is two (PRM 2.2.4-2.2.5).
+    """
+    fields = banked_fields(opcode)
+    numbers = [(_get(opcode, bits), bank, mode) for bits, bank, mode in fields]
+    stepping = _is_byte(opcode) and any(
+        bank == "A" and mode in (3, 4) and number in (0, 7) for number, bank, mode in numbers
+    )
+    swap_d = any(number == 7 and bank == "D" for number, bank, _ in numbers)
+    swap_a = not stepping and any(number == 7 and bank == "A" for number, bank, _ in numbers)
+    swap = {0: 7, 7: 0}
+    twin = opcode
+    for (bits, bank, _), (number, _, _) in zip(fields, numbers, strict=True):
+        if (bank == "D" and swap_d) or (bank == "A" and swap_a):
+            twin = _put(twin, bits, swap.get(number, number))
+    return twin, swap_d, swap_a
+
+
+def _run_seven(cpu, bus, opcode, state, swap_d, swap_a):
+    """Run ``opcode`` in supervisor mode with D0/D7 and A0/A7 swapped as asked."""
+    bus.load(PROGRAM, [opcode, *EXTENSION_D6, 0x4E71, 0x4E71])
+    d = list(state["d"])
+    a = [*state["a"], state["ssp"]]
+    if swap_d:
+        d[0], d[7] = d[7], d[0]
+    if swap_a:
+        a[0], a[7] = a[7], a[0]
+    cpu.R[0:8] = d
+    cpu.R[8:16] = a
+    cpu._other_sp = state["usp"]
+    cpu.SR = 0x2700 | (state["sr"] & 0x1F)
+    cpu.halted = cpu.stopped = cpu._trace_pending = False
+    cpu.set_pc(PROGRAM)
+    bus.log.clear()
+    clocks = cpu.step()
+    d, a = list(cpu.R[0:8]), list(cpu.R[8:16])
+    if swap_d:
+        d[0], d[7] = d[7], d[0]
+    if swap_a:
+        a[0], a[7] = a[7], a[0]
+    outcome = (d, a, cpu.SR, cpu._other_sp, cpu.PC, clocks, cpu.halted)
+    log = list(bus.log)
+    bus.rollback()
+    return outcome, log
+
+
+def test_register_seven_words_behave_as_their_register_zero_twins():
+    """A word the canonical twin leaves alone behaves as its 0 <-> 7 twin.
+
+    Every word of a PLAIN family that is its own canonical twin, with D0 and
+    D7 exchanged, and A0 and A7 wherever PRM 2.2 treats A7 as any other
+    address register.  D6 is the index of every indexed mode, an even value
+    no renaming touches.
+    """
+    bus = JournalBus(seed=7)
+    for vector in range(256):
+        bus.set_long(vector * 4, HANDLER)
+    bus.load(HANDLER, [0x4E71] * 8)
+    cpu = M68000CPU(bus.read_byte, bus.read_word, bus.write_byte, bus.write_word)
+    rng = random.Random(2007)
+    compared = 0
+    failures = []
+    for opcode in range(0x10000):
+        if NAMES[opcode] not in PLAIN or canonical_twin(opcode)[0] != opcode:
+            continue
+        twin, swap_d, swap_a = seven_to_zero_twin(opcode)
+        if twin == opcode:
+            continue
+        for _ in range(2):
+            state = _state(rng)
+            state["d"][6] &= ~1  # the index register: even, so no address error
+            ours = _run_seven(cpu, bus, opcode, state, False, False)
+            theirs = _run_seven(cpu, bus, twin, state, swap_d, swap_a)
+            if ours != theirs:
+                failures.append(f"{opcode:04X} ({NAMES[opcode]}) vs twin {twin:04X}")
+            assert not HANDLER <= ours[0][4] < HANDLER + 16, f"{opcode:04X} took an exception"
+        compared += 1
+    assert not failures, f"{len(failures)} words differ from their twins; first: {failures[:5]}"
+    assert compared > 150

@@ -222,6 +222,39 @@ def test_bcc_takes_every_displacement():
         assert cpu.PC == (0x3000 if target & 1 else target), displacement
 
 
+def test_every_bcc_word_branches_by_its_condition():
+    """All 3,584 Bcc words: each condition with each displacement, taken and not.
+
+    PRM 4-25 and Table 3-19; UM Table 8-9 for the clocks (taken 10; not
+    taken 8 with a byte displacement, 12 with a word one).  The gate runs
+    1,839 of these words' (condition, displacement) pairs with the rest of
+    the suite; the tests above run every condition and every displacement,
+    but not every pair.  A zero byte displacement takes the word after the
+    opcode ($0100 here).
+    """
+    cpu, bus = with_vectors(v3=0x3000)
+    bus.load(0x3000, [NOP] * 4)
+    for condition in range(2, 16):
+        holds = [ccr for ccr in range(16) if condition_holds(condition, ccr)]
+        fails = [ccr for ccr in range(16) if not condition_holds(condition, ccr)]
+        for displacement in range(256):
+            word = 0x6000 | (condition << 8) | displacement
+            offset = sign_extend_8(displacement) if displacement else 0x0100
+            target = 0x1002 + offset
+            for ccr, taken in ((holds[displacement % len(holds)], True),
+                               (fails[displacement % len(fails)], False)):  # fmt: skip
+                restart(cpu, bus, [word, 0x0100, NOP], sr=0x2700 | ccr)
+                clocks = cpu.step()
+                what = f"{word:04X} with CCR {ccr:X}"
+                if not taken:
+                    assert cpu.PC == (0x1004 if not displacement else 0x1002), what
+                    assert clocks == (12 if not displacement else 8), what
+                elif target & 1:
+                    assert cpu.PC == 0x3000, f"{what}: odd target faults (UM 6.3.10)"
+                else:
+                    assert cpu.PC == target and clocks == 10, what
+
+
 def test_moveq_every_register_and_every_byte():
     """MOVEQ -- Dn <- the 8-bit data sign-extended to 32 bits (PRM 4-134).
 
@@ -959,3 +992,183 @@ def assert_extended_flags(cpu, name, destination, source, extend, size, z_before
     z = bool(z_before) if result == 0 else False
     assert_flags(cpu, bool(rm), z, bool(v), bool(c), what)
     assert bool(cpu.SR & 0x10) is bool(c), f"{what}: X"
+
+
+# -- the last words: A7's byte step, and operands named by no register --------
+# The register-renaming tests (test_register_renaming.py) reach every defined
+# word but the ones below: byte operands through (A7)+ and -(A7), which the
+# manual treats differently from every other register, and words whose only
+# operand is an absolute address.  They are checked against a model of the
+# effective address written from PRM 2.2 alone, with no call into the core.
+
+
+def _model_ea(state, mode, register, size, words, cursor):
+    """PRM 2.2: the operand's location, and the next extension word's index.
+
+    Returns (("D", n) | ("A", n) | ("M", address) | ("I", value), cursor),
+    applying the (An)+ and -(An) steps to ``state`` as it goes.  A byte
+    through (A7)+ or -(A7) moves A7 by two, keeping the stack word-aligned
+    (PRM 2.2.4, 2.2.5).
+    """
+    a = state["a"]
+    step = 2 if size == 1 and register == 7 else size
+    extension_address = START + 2 + 2 * cursor
+    if mode == 0:
+        return ("D", register), cursor
+    if mode == 1:
+        return ("A", register), cursor
+    if mode == 2:
+        return ("M", a[register]), cursor
+    if mode == 3:
+        address = a[register]
+        a[register] = (address + step) & 0xFFFFFFFF
+        return ("M", address), cursor
+    if mode == 4:
+        a[register] = (a[register] - step) & 0xFFFFFFFF
+        return ("M", a[register]), cursor
+    word = words[cursor]
+    if mode == 5:
+        return ("M", (a[register] + sign_extend_16(word)) & 0xFFFFFFFF), cursor + 1
+    if mode == 6:
+        return ("M", (a[register] + _model_index(state, word)) & 0xFFFFFFFF), cursor + 1
+    if register == 0:  # (xxx).W
+        return ("M", sign_extend_16(word) & 0xFFFFFFFF), cursor + 1
+    if register == 1:  # (xxx).L
+        return ("M", (word << 16) | words[cursor + 1]), cursor + 2
+    if register == 2:  # (d16,PC): from the extension word's own address (PRM 2.2.11)
+        return ("M", (extension_address + sign_extend_16(word)) & 0xFFFFFFFF), cursor + 1
+    if register == 3:  # (d8,PC,Xn)
+        return ("M", (extension_address + _model_index(state, word)) & 0xFFFFFFFF), cursor + 1
+    if size == 4:  # #<data>
+        return ("I", (word << 16) | words[cursor + 1]), cursor + 2
+    return ("I", word & (0xFF if size == 1 else 0xFFFF)), cursor + 1
+
+
+def _model_index(state, brief: int) -> int:
+    """PRM 2.4: the brief extension word's Xn (sign-extended word or long) plus d8."""
+    bank = state["a"] if brief & 0x8000 else state["d"]
+    index = bank[(brief >> 12) & 7]
+    if not brief & 0x0800:
+        index = sign_extend_16(index & 0xFFFF)
+    return index + sign_extend_8(brief & 0xFF)
+
+
+def _model_read(state, memory, location, size):
+    kind, where = location
+    if kind == "I":
+        return where
+    if kind in "DA":
+        return state["d" if kind == "D" else "a"][where] & ((1 << (8 * size)) - 1)
+    value = 0
+    for offset in range(size):
+        value = (value << 8) | memory.get((where + offset) & 0xFFFFFF, None)
+    return value
+
+
+def _model_write(state, memory, location, size, value):
+    kind, where = location
+    if kind == "D":
+        mask = (1 << (8 * size)) - 1
+        state["d"][where] = (state["d"][where] & ~mask & 0xFFFFFFFF) | (value & mask)
+        return
+    for offset in range(size):
+        shift = 8 * (size - 1 - offset)
+        memory[(where + offset) & 0xFFFFFF] = (value >> shift) & 0xFF
+
+
+class _Memory(dict):
+    """The model's view of memory: bytes read from the test bus on first use."""
+
+    def __init__(self, bus) -> None:
+        super().__init__()
+        self.bus = bus
+
+    def get(self, address, default=None):
+        if address not in self:
+            self[address] = self.bus.memory[address]
+        return self[address]
+
+
+def _model_step(opcode, words, state, memory):
+    """PRM Section 4 for the three families left: MOVE, ADDQ/SUBQ, Scc.  Returns the CCR."""
+    ccr = state["sr"] & 0x1F
+    if opcode >> 12 in (1, 2, 3):  # MOVE (PRM 4-116): source first, then destination
+        size = {1: 1, 3: 2, 2: 4}[opcode >> 12]
+        source, cursor = _model_ea(state, (opcode >> 3) & 7, opcode & 7, size, words, 0)
+        value = _model_read(state, memory, source, size)
+        destination, _ = _model_ea(state, (opcode >> 6) & 7, (opcode >> 9) & 7, size, words, cursor)
+        _model_write(state, memory, destination, size, value)
+        msb = 1 << (8 * size - 1)
+        return (ccr & 0x10) | (8 if value & msb else 0) | (4 if value == 0 else 0)
+    if (opcode >> 6) & 3 == 3:  # Scc (PRM 4-173): a byte of all ones or all zeros
+        target, _ = _model_ea(state, (opcode >> 3) & 7, opcode & 7, 1, words, 0)
+        value = 0xFF if condition_holds((opcode >> 8) & 15, ccr) else 0
+        _model_write(state, memory, target, 1, value)
+        return ccr
+    size = (1, 2, 4)[(opcode >> 6) & 3]  # ADDQ/SUBQ (PRM 4-11, 4-182)
+    data = ((opcode >> 9) & 7) or 8
+    target, _ = _model_ea(state, (opcode >> 3) & 7, opcode & 7, size, words, 0)
+    before = _model_read(state, memory, target, size)
+    flags = sub_flags if opcode & 0x0100 else add_flags
+    result, n, z, v, c = flags(before, data, size)
+    _model_write(state, memory, target, size, result)
+    return (0x11 if c else 0) | (8 if n else 0) | (4 if z else 0) | (2 if v else 0)
+
+
+#: The defined words no other test executes, as of this commit: byte MOVEs
+#: through (A7)+/-(A7), and ADDQ, SUBQ and Scc on byte (A7)+/-(A7) or an
+#: absolute address.  docs/coverage.md, "Encodings".
+LAST_WORDS = (
+    0x13E7, 0x1EA7, 0x1ED7, 0x1EDF, 0x1EEF, 0x1EFC, 0x1F27, 0x1F37, 0x1F38, 0x1F3A,
+    0x1F3B, 0x1F3C, 0x1F5F, 0x1F67,
+    0x5039, 0x50B9, 0x5139, 0x5179, 0x52B9, 0x52E7, 0x531F, 0x541F, 0x54B9, 0x5639,
+    0x56B9, 0x56F8, 0x571F, 0x581F, 0x5838, 0x591F, 0x5939, 0x59F9, 0x5B78, 0x5BB8,
+    0x5C79, 0x5CB8, 0x5DB9, 0x5E78, 0x5EB8, 0x5F38,
+)  # fmt: skip
+
+
+def test_the_words_no_renaming_reaches_match_the_manual():
+    """Each of the last 40 words, against the PRM 2.2 / Section 4 model above.
+
+    Every register, the CCR, and every byte the instruction wrote must be
+    what the model says, from four random states each.  The extension words
+    name D6.L or A6.L as the index (even, so nothing faults) and serve as
+    even displacements, addresses and immediates otherwise, positive in two
+    runs and negative in the other two.
+    """
+    import random
+
+    from m68000_python._dispatch import NAMES
+
+    rng = random.Random(40)
+    # Positive words (index D6.L) and negative ones (index A6.L), so absolute
+    # short addresses and displacements are sign-extended both ways.
+    extensions = ([0x6804, 0x6808, 0x680C, 0x6810], [0xE804, 0xE808, 0xE80C, 0xE810])
+    for opcode in LAST_WORDS:
+        assert NAMES[opcode] in ("move", "addq", "subq", "scc"), f"{opcode:04X}"
+        for run in range(4):
+            extension = extensions[run % 2]
+            cpu, bus = with_vectors()
+            state = {
+                "d": [rng.getrandbits(32) for _ in range(8)],
+                "a": [rng.randrange(0x100000, 0x700000, 2) for _ in range(7)] + [0x7F0000],
+                "sr": 0x2700 | rng.randrange(32),
+            }
+            state["d"][6] &= ~1
+            restart(cpu, bus, [opcode, *extension, NOP], sr=state["sr"], sp=state["a"][7])
+            cpu.R[0:8] = state["d"]
+            cpu.R[8:15] = state["a"][:7]
+            model = {"d": list(state["d"]), "a": list(state["a"]), "sr": state["sr"]}
+            memory = _Memory(bus)
+            ccr = _model_step(opcode, extension, model, memory)
+            before = bytes(bus.memory)  # the model has read what it needs; the core has not run
+            cpu.step()
+            what = f"{opcode:04X} ({NAMES[opcode]})"
+            assert list(cpu.R[0:8]) == model["d"], f"{what}: data registers"
+            assert list(cpu.R[8:16]) == model["a"], f"{what}: address registers"
+            assert cpu.SR & 0x1F == ccr, f"{what}: CCR {cpu.SR & 0x1F:05b} != {ccr:05b}"
+            written = {entry[1] for entry in bus.log if entry[0] == "wb"}
+            written |= {entry[1] + i for entry in bus.log if entry[0] == "ww" for i in (0, 1)}
+            for address in written | set(memory):
+                expected = memory[address] if address in memory else before[address]
+                assert bus.memory[address] == expected, f"{what}: byte {address:06X}"
