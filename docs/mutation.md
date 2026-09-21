@@ -109,6 +109,11 @@ What the numbers do and do not say:
 
 ### After the survivor tests (phase 3): 3
 
+Phase 3 ran against the suite at e8653f6. After it, more coverage tests
+were added (a7e3079, f6a61db); the eight phase-2 survivors were run again
+against the whole suite at f6a61db, with the same result: N7, M8 and D10
+survive, the other five are killed.
+
 - **D10** (`_system.py`, `_divide_by_zero`): DIVS by zero with N set instead
   of Z. **A real hole, not decidable from the manuals.** PRM leaves the
   condition codes undefined after a divide by zero; the pinned gate has no
