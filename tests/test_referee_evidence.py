@@ -218,3 +218,32 @@ def test_a_prefetch_bus_error_frame(name, program, at, a0, pc, ir):
     assert bus.long(sp + 2) == BERR_BASE, f"{name}: access address"
     assert bus.word(sp + 6) == ir, f"{name}: IR"
     assert bus.long(sp + 10) == pc, f"{name}: stacked PC"
+
+
+# -- an exception whose vector is odd ------------------------------------------
+
+
+def test_trapv_with_an_odd_vector_stacks_trapv_as_the_ir():
+    """TRAPV taken through an odd vector: the address error's IR is TRAPV itself (T2).
+
+    The handler's first fetch faults while the trap is processed, and the
+    group 0 frame's IR slot (and bits 15-5 of the access word) hold the
+    decoder's opcode.  WinUAE's tester core, run: $4E76, the TRAPV.  MAME
+    0.285's microcode agrees (T3, read: the taken path ``trpv3`` moves IRC
+    into IR but never loads IRD).  In scope: the ODDEXC preset, which runs
+    TRAPV, CHK, TRAP, DIVU and DIVS with odd exception vectors, and the 4.4.0
+    changelog: "68000/010 odd exception vector generated address error stack
+    frame is now correct.  Tester support added."  I/N is not asserted: see
+    docs/worklog.md.
+    """
+    cpu, bus = with_vectors(v3=0x3000, v7=0x5001)
+    bus.load(0x3000, [NOP] * 4)
+    restart(cpu, bus, [0x4E76, 0x1234, NOP], sr=0x2702)  # TRAPV with V set
+    cpu.step()
+    sp = cpu.R[15]
+    assert cpu.PC == 0x3000, "the address-error handler"
+    assert bus.long(sp + 2) == 0x5001, "the access address: the odd vector"
+    assert bus.word(sp + 6) == 0x4E76, "IR: TRAPV"
+    assert bus.word(sp) & 0xFFE0 == 0x4E60, "access word bits 15-5: TRAPV"
+    assert bus.long(sp + 10) == 0x1002, "stacked PC"
+    assert bus.long(sp + 16) == 0x1002, "the TRAPV frame's PC beneath it"
