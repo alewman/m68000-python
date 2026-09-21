@@ -247,3 +247,48 @@ def test_trapv_with_an_odd_vector_stacks_trapv_as_the_ir():
     assert bus.word(sp) & 0xFFE0 == 0x4E60, "access word bits 15-5: TRAPV"
     assert bus.long(sp + 10) == 0x1002, "stacked PC"
     assert bus.long(sp + 16) == 0x1002, "the TRAPV frame's PC beneath it"
+
+
+# -- found by the referee sweep, decided by the manual ---------------------------
+
+
+def test_a_bus_error_on_the_write_half_of_tas_is_a_bus_error():
+    """TAS whose write cycle sees BERR takes the bus error exception (UM 6.3.9.1).
+
+    The host contract (cpu.py) lets any bus callable raise BusError to
+    assert BERR, and UM 6.3.9.1 makes BERR on any bus cycle a bus error
+    exception.  TAS's write half went to the host's ``tas_write`` outside
+    the core's bus-error handling, so the BusError escaped ``step()``.
+    Found by validation/referees/bus_errors.py.  Asserted: vector 2, R/W =
+    write, supervisor data space, the access address; the stacked PC and IR
+    are not (UM 6.2.5: unpredictable; write bus errors lie outside what
+    WinUAE's tester re-verified, docs/referees.md).
+    """
+    bus = Bus()
+
+    def guard(write):
+        def guarded(address, value):
+            if address & 0xF80000 == BERR_BASE:
+                raise BusError(address)
+            write(address, value)
+
+        return guarded
+
+    bus.set_long(0, STACK)
+    bus.set_long(4, 0x1000)
+    bus.set_long(2 * 4, 0x3000)
+    bus.load(0x3000, [NOP] * 4)
+    bus.load(0x1000, [0x4AD0, NOP])  # TAS (A0)
+    cpu = M68000CPU(bus.read_byte, bus.read_word, guard(bus.write_byte), guard(bus.write_word))
+    cpu.reset()
+    cpu.R[8] = BERR_BASE
+    bus.log.clear()
+    cpu.step()
+    sp = cpu.R[15]
+    assert ("rb", BERR_BASE, 0) in bus.log, "the read half completed"
+    assert cpu.PC == 0x3000, "the bus-error handler"
+    assert sp == STACK - 14
+    information = bus.word(sp)
+    assert not information & 0x10, "R/W: a write"
+    assert information & 0x07 == 5, "supervisor data space"
+    assert bus.long(sp + 2) == BERR_BASE
