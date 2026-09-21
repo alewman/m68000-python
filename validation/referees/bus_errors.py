@@ -6,9 +6,10 @@
 No corpus models BERR.  This script makes one: for every case of the gate
 corpus (SingleStepTests/m68000) that takes no exception, it picks one access
 from the gate's own bus log -- the first data read, the first data write, or
-the first program read -- and runs the case again with that word asserting
-BERR, on this core and on WinUAE's CPU-tester core (whose bus-error region
-is the tester's own "safe memory" mechanism).  Both are reduced to the
+the first program read -- and runs the case again with BERR asserted, for
+that kind of access, from that word on (REGION), on this core and on
+WinUAE's CPU-tester core (whose bus-error region is the tester's own "safe
+memory" mechanism).  Both are reduced to the
 pre-exception view (referee.py) and compared: exception, registers, SR,
 stacked PC, the frame's access information, access address and IR, and
 memory.  Clocks are counted apart: the tester does not verify bus-error
@@ -46,6 +47,11 @@ from referee import (  # noqa: E402
 GATE = HERE.parents[1] / "tests" / "68000_test_vectors" / "m68000" / "v1"
 UNJUDGED = {"oob", "doublefault", "oddssp", "halted", "stopped"}
 KINDS = {"read": 1, "write": 2, "program": 4}
+#: The bus-error region starts at the chosen word and runs 512 KB, the shape
+#: of the tester's own bus-error presets (BEPR, BESRC, BEDST...: a region at
+#: $880000 of $80000 bytes, one kind of access at a time), whose semantics
+#: are the ones verified on hardware.  Only the chosen kind of access faults.
+REGION = 0x80000
 #: Instructions whose first program read is a jump target computed from a
 #: register or the stack, which may carry an upper address byte.  The
 #: tester's program fetches check the bus-error region against the full 32
@@ -100,7 +106,8 @@ def main() -> int:
             for kind, address in targets(case).items():
                 if kind == "program" and stem in JUMPS:
                     continue  # the target may carry an upper byte (see JUMPS)
-                jobs.append((case, setup, kind, (address, 2, KINDS[kind])))
+                size = min(REGION, 0x1000000 - address)
+                jobs.append((case, setup, kind, (address, size, KINDS[kind])))
         lines = []
         for index, (_, setup, _, region) in enumerate(jobs):
             lines.append("B {:x} {:x} {:x}".format(*region))
@@ -108,9 +115,14 @@ def main() -> int:
         lines.append("B 0 0 0")
         shown = 0
         for (case, setup, kind, region), result in zip(jobs, driver.run(lines), strict=True):
-            core, _, _ = run_core(setup, region)
-            theirs = outcome_of_winuae(result, setup)
             counts[f"{kind} cases"] += 1
+            try:
+                core, _, _ = run_core(setup, region)
+            except Exception as error:  # a BusError the core failed to catch
+                counts[f"{kind} core raised"] += 1
+                by_mode[(kind, stem, mode_of(case.name), (type(error).__name__,))] += 1
+                continue
+            theirs = outcome_of_winuae(result, setup)
             if theirs.notes & UNJUDGED:
                 counts[f"{kind} not judged"] += 1
                 continue
