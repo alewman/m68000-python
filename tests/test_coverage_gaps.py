@@ -610,6 +610,46 @@ def test_a_traced_trap_takes_the_trap_then_the_trace():
     assert stacked == 0x3000, "stacked from the trap handler's first instruction"
 
 
+@pytest.mark.parametrize(
+    ("name", "program", "sr", "vector"),
+    [
+        ("ILLEGAL", [ILLEGAL, NOP], 0xA700, 4),
+        ("an undefined word", [0x4AFD, NOP], 0xA700, 4),
+        ("line 1010", [0xA000, NOP], 0xA700, 10),
+        ("line 1111", [0xF000, NOP], 0xA700, 11),
+        ("RESET in user mode", [0x4E70, NOP], 0x8000, 8),
+        ("ANDI to SR in user mode", [0x027C, 0xFFFF, NOP], 0x8000, 8),
+    ],
+)
+def test_no_trace_follows_an_instruction_that_was_not_executed(name, program, sr, vector):
+    """UM 6.3.8: an illegal or privileged instruction is not executed, so it is not traced.
+
+    UM 6.3.8 (tracing): when the instruction is not executed -- because an
+    interrupt is taken, or because it is illegal or privileged -- the trace
+    exception does not occur; an exception the instruction itself forces
+    (TRAP, TRAPV, CHK, divide by zero) is processed and the trace follows it
+    (test_a_traced_trap_takes_the_trap_then_the_trace).  UM 6.3.6 counts the
+    line 1010 and 1111 words among the illegal patterns, with vectors of their
+    own.  Two independent emulators agree: MAME 0.285's microcode clears the
+    pending trace on entry to its illegal, privilege, line A and line F states
+    (m68000-sdf.cpp, ``state_illegal_df`` and its siblings: the nanocode's
+    trace-pending bit, T3), and WinUAE keeps a trace pending only after the
+    divide-by-zero, CHK, TRAPV and TRAP exceptions (newcpu.cpp,
+    ``exception_check_trace``, T2 by reading).  Neither corpus can see this:
+    the gate captures its final state before any trace exception, and the
+    680x0 corpus has no case with T set.
+    """
+    cpu, bus = with_vectors(**{f"v{vector}": 0x3000, "v9": 0x3100})
+    bus.load(0x3000, [NOP] * 4)
+    bus.load(0x3100, [NOP] * 4)
+    restart(cpu, bus, program, sr=sr, sp=0x9000 if not sr & 0x2000 else STACK)
+    cpu.ssp = STACK
+    cpu.step()
+    assert cpu.PC == 0x3000, f"{name}: vector {vector} taken"
+    cpu.step()
+    assert cpu.PC == 0x3002, f"{name}: the handler's first instruction ran, no trace exception"
+
+
 def test_an_address_error_inside_exception_processing_sets_i_slash_n():
     """A fault while taking an exception marks the frame not-an-instruction.
 
