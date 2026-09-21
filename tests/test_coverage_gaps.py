@@ -807,6 +807,37 @@ def test_move_long_with_a_zero_low_word_is_not_zero():
             assert_flags(cpu, bool(n), bool(z), False, False, (destination, hex(value)))
 
 
+def test_the_host_contract_edges():
+    """Three edges of the embedding contract (README.md, cpu.py) no test reached.
+
+    ``tas_write`` without function codes receives TAS's write half (the
+    Genesis drops it); ``set_ipl`` refuses a level outside 0-7 (UM 6.3.2:
+    three IPL lines); ``restore_state`` refuses anything but a CPUState.
+    """
+    writes = []
+    bus = Bus()
+    bus.set_long(0, STACK)
+    bus.set_long(4, START)
+    bus.load(START, [0x4AD0, NOP])  # TAS (A0)
+    cpu = M68000CPU(
+        bus.read_byte,
+        bus.read_word,
+        bus.write_byte,
+        bus.write_word,
+        tas_write=lambda address, value: writes.append((address, value)),
+    )
+    cpu.reset()
+    cpu.R[8] = 0x4000
+    bus.memory[0x4000] = 0x01
+    cpu.step()
+    assert writes == [(0x4000, 0x81)], "the write half goes to tas_write, bit 7 set"
+    assert bus.memory[0x4000] == 0x01, "and not to write_byte"
+    with pytest.raises(ValueError):
+        cpu.set_ipl(8)
+    with pytest.raises(TypeError):
+        cpu.restore_state({})
+
+
 def test_reset_loads_the_stack_pointer_and_program_counter_from_the_vectors():
     """Reset -- SSP from $000000, PC from $000004, S set, T clear, mask 7 (UM 6.3.1).
 
@@ -886,10 +917,12 @@ def test_the_reset_instruction_calls_the_host_hook_and_changes_nothing_else():
 # never occur at word and long size, and some pairs never at byte size.  The
 # expected flags are PRM Table 3-18's formulas (add_flags, sub_flags above).
 
+#: 0, 1, max positive, min negative, all ones -- and one ordinary value, so
+#: every (boundary, ordinary) pair runs too.
 BOUNDARY_VALUES = {
-    1: (0x00, 0x01, 0x7F, 0x80, 0xFF),
-    2: (0x0000, 0x0001, 0x7FFF, 0x8000, 0xFFFF),
-    4: (0x00000000, 0x00000001, 0x7FFFFFFF, 0x80000000, 0xFFFFFFFF),
+    1: (0x00, 0x01, 0x7F, 0x80, 0xFF, 0x5A),
+    2: (0x0000, 0x0001, 0x7FFF, 0x8000, 0xFFFF, 0x5A3C),
+    4: (0x00000000, 0x00000001, 0x7FFFFFFF, 0x80000000, 0xFFFFFFFF, 0x5A3C9617),
 }
 
 
