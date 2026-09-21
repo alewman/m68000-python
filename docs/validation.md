@@ -19,7 +19,9 @@ Amigas, [referees](referees.md)), sides with this core on most of them and
 one cause rests on a hardware run (T1).  Running WinUAE also found places
 where this core and the gate disagree with it inside that scope (the An of
 a faulting word (An)+, the stacked PC of three families of odd jumps and
-MOVEM, one I/N bit); those are open questions, not changes.  Beyond BCD and
+MOVEM, one I/N bit); the core follows the gate on each, and
+[claims](claims.md) lists them as contested.  A second I/N rule (group 2
+exception processing) was one-sided and is now the core's (e395be9).  Beyond BCD and
 what WinUAE's run decides, the claim rests on emulator-derived oracles
 (MAME's microcode transcription): strong detectors, not a hardware
 judgement.

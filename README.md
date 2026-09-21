@@ -7,8 +7,10 @@ memory space and the devices, the core owns instruction semantics, the
 status register, the prefetch queue, and the exception model, and `step()`
 returns the clock total of what it ran.
 
-**Status: the whole 68000 instruction set, certified up all six rungs of
-the plan, not yet released.** Against **hardware-captured** values it passes
+**Status: the whole 68000 instruction set, up all six rungs of the plan,
+not yet released.** What is claimed, at what strength, and what is
+contested or not claimed at all is [docs/claims.md](docs/claims.md): read it
+before relying on any corner of the exception model. Against **hardware-captured** values it passes
 every input of flamewing's BCD verifier tables (`ABCD`, `SBCD`, `NBCD`:
 525,312 cases, result and all five flags). Against the pinned,
 **microcode-derived** SingleStepTests/m68000 corpus it passes **317,500 of

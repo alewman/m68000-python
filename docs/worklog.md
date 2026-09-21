@@ -173,6 +173,19 @@ unchanged; each needs Aubrey's decision.
    register; and a few stacked PCs (LINK, RTS, MOVE to (An)/(An)+).
    Matching it means reordering the closing prefetch against the writes in
    most handlers.  Not attempted: is it wanted, with one lineage to check it?
+**Decided 2026-09-21 (Aubrey), questions 12-20:**
+- 12-16 (DBcc, word (An)+, JSR and MOVEM stacked PCs, CMPM.L, MOVE.W
+  -(An) I/N): the core stays on the gate; each is **contested** in
+  docs/claims.md, to be settled by cputest on real hardware.  There is no
+  68000 hardware in this project, so they stay contested.
+- 17 (group 2 I/N): the evidence is one-sided (WinUAE run + MAME read
+  against a reading of the manual), no gate case is involved: the test was
+  changed and the core fixed (17594c3 failing test, e395be9 fix).
+- 18 (the 2-clock questions): undecidable here; the gate's values stand.
+- 19 (bus-error frames): **outside the contract**; BERR is raised and
+  taken, the frame contents are not claimed.
+- docs/claims.md written: the claim boundary.
+
 20. **The RTE/RTR row of the rung 5 table was labelled T2.**  The order of
    bus reads is not something cputest checks; running WinUAE agrees with
    the core's order, but that is T3.  validation.md now says so.
