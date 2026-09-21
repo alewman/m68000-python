@@ -16,7 +16,7 @@ Only the operand read can fault in a read-modify-write: the write goes to
 the address the read already proved even.
 """
 
-from m68000_python._core import MASK, MSB, C, N, V, X, Z
+from m68000_python._core import MASK, MSB, VECTOR_BUS_ERROR, BusError, C, N, V, X, Z
 from m68000_python._ea import AN, DN, EA_KIND, IMM, sign_extend_16
 
 #: Bits 7-6 of the common size field (PRM Section 8): 00 byte, 01 word, 10 long.
@@ -470,7 +470,11 @@ class ALUMixin:
         self._cycles += 2
         self._flags_logic(value, 1)
         self._cycles += 4
-        self._tas_write(address & 0xFFFFFF, value | 0x80)
+        try:
+            self._tas_write(address & 0xFFFFFF, value | 0x80)
+        except BusError:
+            # BERR on the write half is a bus error like any other (UM 6.3.9.1).
+            raise self._fault(VECTOR_BUS_ERROR, address, True, False) from None
         self._prefetch()
 
     # -- multiply and divide (PRM 4-139, 4-141, 4-93, 4-96; UM Table 8-4) ------
