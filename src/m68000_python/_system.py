@@ -68,7 +68,7 @@ class SystemMixin:
 
     def _op_trap(self, opcode: int) -> None:
         """TRAP -- exception through vector 32 + n, stacking the next PC (PRM 4-188; UM 6.3.5)."""
-        self._exception(VECTOR_TRAP_BASE + (opcode & 0xF), self._pc - 2)
+        self._exception(VECTOR_TRAP_BASE + (opcode & 0xF), self._pc - 2, by_instruction=True)
 
     def _op_trapv(self, opcode: int) -> None:
         """TRAPV -- if V, exception through vector 7 (PRM 4-189; UM Table 8-14: 34 clocks)."""
@@ -83,7 +83,7 @@ class SystemMixin:
         # is processed stacks TRAPV as its IR (WinUAE's CPU tester, run, T2;
         # MAME 0.285's trpv3 never loads IRD, T3; docs/referees.md).
         self._opcode = opcode
-        self._exception(VECTOR_TRAPV, self._pc - 4, idle=0, saved=saved)
+        self._exception(VECTOR_TRAPV, self._pc - 4, idle=0, saved=saved, by_instruction=True)
 
     def _divide_by_zero(self, signed: bool, dividend: int) -> None:
         """DIVU/DIVS by zero: vector 5, stacking the next PC (UM 6.3.5; Table 8-14: 38+).
@@ -101,7 +101,7 @@ class SystemMixin:
         elif not dividend & 0xFFFF0000:
             ccr |= Z
         self.SR = ccr
-        self._exception(VECTOR_ZERO_DIVIDE, self._pc - 2, idle=8)
+        self._exception(VECTOR_ZERO_DIVIDE, self._pc - 2, idle=8, by_instruction=True)
 
     def _op_chk(self, opcode: int) -> None:
         """CHK -- trap through vector 6 if Dn.w < 0 or Dn.w > source (PRM 4-69; UM Table 8-12).
@@ -123,10 +123,10 @@ class SystemMixin:
         # costs one more internal step, unless bound - Dn, taken as a 16-bit
         # difference, came out negative (corpus, T3: every CHK case agrees).
         if value > bound:
-            self._exception(VECTOR_CHK, self._pc - 2, idle=8)
+            self._exception(VECTOR_CHK, self._pc - 2, idle=8, by_instruction=True)
         elif value < 0:
             idle = 8 if (bound - value) & 0x8000 else 10
-            self._exception(VECTOR_CHK, self._pc - 2, idle=idle)
+            self._exception(VECTOR_CHK, self._pc - 2, idle=idle, by_instruction=True)
         else:
             self._cycles += 6
             self._prefetch()

@@ -422,13 +422,23 @@ class CoreMixin:
         self._set_sr((saved | S) & ~T)
         return saved
 
-    def _exception(self, vector: int, pc: int, *, idle: int = 4, saved: int | None = None) -> None:
+    def _exception(
+        self,
+        vector: int,
+        pc: int,
+        *,
+        idle: int = 4,
+        saved: int | None = None,
+        by_instruction: bool = False,
+    ) -> None:
         """Group 1 and 2 exception entry with the three-word frame (UM Figure 6-5).
 
         ``pc`` is the value to stack; ``idle`` the internal clocks before the
         first push.  The pushes, the vector fetch and the refill are in the
         order the corpus records: PC low, SR, PC high, vector high and low,
         then the handler's first two words with two idle clocks between.
+        ``by_instruction`` marks group 2 (TRAP, TRAPV, CHK, divide by zero),
+        whose processing the instruction itself starts.
         """
         entered = self._enter_supervisor()
         if saved is None:
@@ -436,8 +446,10 @@ class CoreMixin:
         self._trace_pending = False
         self._cycles += idle
         # An address or bus error from here on is one "not an instruction"
-        # access: I/N is set in its information word (UM Figure 6-7).
-        self._processing_exception = True
+        # access, I/N set in its information word (UM Figure 6-7), except in
+        # group 2, where the instruction started the processing: I/N clear
+        # (WinUAE's tester core, T2 by running; MAME 0.285's microcode, T3).
+        self._processing_exception = not by_instruction
         sp = (self.R[15] - 6) & 0xFFFFFFFF
         self.R[15] = sp
         self._write_word(sp + 4, pc)
