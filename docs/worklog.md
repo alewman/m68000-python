@@ -76,6 +76,32 @@ went on.
    the core's own reset). Acceptable?
 7. **Nothing pushed, no GitHub repository created**, per the brief.
 
+Added 2026-09-21 (coverage and mutation session):
+
+8. **A weak existing test.** `tests/test_interrupts.py`,
+   `test_autovector_wait_follows_the_e_clock_phase`, asserts
+   `clocks == set(range(44 + 4, 44 + 14)) or len(clocks) > 1`. The range
+   is 48-57; the core and MAME (per the lockstep) give 49-58, so the first
+   half is false and the test passes only because the clocks vary. Mutant
+   CY10 (the phase boundary moved) survived it. Conservative choice: the
+   test is left exactly as it was (the session's rules forbid changing an
+   existing test), and a precise one was added beside it
+   (`test_mutation_survivors.py::test_autovector_clocks_at_each_e_clock_phase`,
+   T3). Should the old one be corrected to `range(49, 59)` or removed?
+9. **Dead code.** `_push_word` in `_core.py` is never called, and the long
+   branch of `_write` is never reached (every long write calls
+   `_write_long` or `_write_long_low_first` directly). Left in place (no
+   change to `src/` except the bug fix). Remove them?
+10. **The divide-by-zero flags remain open** (question 4, sharpened):
+   mutant D10, which changes the DIVS-by-zero rule, survives the whole suite
+   and both corpora -- the 680x0 corpus has one divide by zero, a DIVU, and
+   no DIVS. No test asserts these flags, by design. Running WinUAE's core on
+   these inputs would move it from T2-read to T2-run; hardware would settle
+   it.
+11. **The double bus fault** (question 3): a test now asserts the manual's
+   halt (UM 5.4.4). If MAME's behaviour were ever preferred, that test is
+   the one to revisit.
+
 ## Log
 
 ### Rung 1 (2026-09-19)
@@ -264,3 +290,49 @@ failing test commit and then a separate fix commit.
   exceptions through `_not_executed`, which marks the step untraced.  The
   whole suite (395 tests, all 317,500 gate cases) passes after it on CPython
   3.14.4 and PyPy 7.3.23.
+
+### Mutation testing (2026-09-21)
+
+- `scripts/mutate.py` (3d241c3, e7ffbcd): 176 mutants in 17 areas, each an
+  anchored replacement applied to a copy of `src/m68000_python` in
+  `/tmp/claude-1000`; `src/`'s SHA-256 checked before and after every run
+  (unchanged, `0af9369809dc`). Phase 1: each mutant's corpus files plus
+  every non-corpus test module (330 s, PyPy, 4 jobs, load 7-11); phase 2:
+  the 8 survivors and the 11 mutants only new tests had killed, against all
+  127 files and every module (103 s); phase 3: the 8 survivors after tests
+  were written for them (49 s); detector: the 3 final survivors against the
+  680x0 files (nothing changes: those files hold no case these mutants
+  touch).
+- **Scores:** suite at e3629c1 158/176 (89.8%); with the coverage tests
+  168/176 (95.5%); with the survivor tests 173/176 (98.3%), 173/174 without
+  the two equivalent mutants. Weakest areas at e3629c1: division 60%, frame
+  82%, overflow, prefetch and masking 80%. Details: docs/mutation.md.
+- **Survivors of the whole suite (phase 2):** N7, M8 (both shown equivalent
+  after the run: N7 exhaustively over 256 bytes, M8 by six programs across
+  the 32-bit wrap), M3, D7, D9, SP12, CY10 (holes the manuals, or for CY10
+  MAME, close: tests in `tests/test_mutation_survivors.py`, e8653f6), and
+  D10 (the DIVS-by-zero flags: undefined in PRM, open).
+- A mistake of mine, caught by the detector phase: the first coverage probe
+  ran 680x0 cases on the m68000 corpus's word-addressed host, so its 680x0
+  path counts were wrong (199 divide-by-zero cases reported; there is 1).
+  Fixed in e7ffbcd; no committed document had used the wrong numbers.
+
+### Closing the encodings (2026-09-21)
+
+- `tests/test_register_renaming.py` (f8982e1, a7e3079): register renaming
+  is a symmetry the manual implies (PRM 2.2 defines every mode on a generic
+  n; only A7 is special). 35,981 words are compared with their canonical
+  twins and 1,559 with their 0 <-> 7 twins, from random states, on every
+  register, SR, stack pointer, PC, clock and bus access.
+- `tests/test_coverage_gaps.py` grew: every Bcc word taken and not taken;
+  the last 40 words (byte (A7)+/-(A7), absolute-only operands) against a
+  model of PRM 2.2's effective addresses; the host-contract edges; one
+  ordinary operand value beside the boundaries.
+- Result: the suite executes **all 45,815 defined first words** (the gate
+  38,019); of the 7,796 the gate misses, 3,345 are renamings of words it
+  runs. Every declared behavioural path is reached, every achievable flag
+  outcome of ADD/SUB/CMP/ADDX/SUBX/logic occurs, all 36 operand-class pairs
+  at each size; 1,442 of 1,466 core statements run, the rest import-time
+  code, defensive asserts and 4 dead lines. docs/coverage.md.
+- Suite: 415 tests, CPython 3.14.4 about 11 s, PyPy 7.3.23 about 14 s (the
+  corpus gate included), on the loaded machine.
