@@ -207,6 +207,9 @@ def report_encodings(which: str, out, suite: bool = False) -> None:
             file=out,
         )
 
+    if which == "m68000" and not suite:
+        report_transfer(executed, [op for op in defined if op not in executed], out)
+
     # Per rule, with every field broken out.
     print("\n## Per rule and field\n", file=out)
     print(
@@ -243,6 +246,53 @@ def report_encodings(which: str, out, suite: bool = False) -> None:
         for line in combinations(pattern, words, set(run)):
             print(f"    {line}", file=out)
         print(file=out)
+
+
+def report_transfer(executed: set[int], unrun: list[int], out) -> None:
+    """For the words the gate never runs: what evidence in the suite reaches each.
+
+    The renaming relations and the manual-derived tests are in
+    tests/test_register_renaming.py and tests/test_coverage_gaps.py; a word
+    whose renamed twin the gate *does* run inherits the gate's evidence
+    through a symmetry the manual states (PRM 2.2).
+    """
+    from test_coverage_gaps import LAST_WORDS
+    from test_register_renaming import PLAIN, canonical_twin, seven_to_zero_twin
+
+    direct = {"bcc", "bra", "moveq"}  # every word run by test_coverage_gaps.py
+    twins_of_others = set()
+    for opcode in range(0x10000):
+        if NAMES[opcode] not in UNDEFINED and NAMES[opcode] != "movem":
+            twin = canonical_twin(opcode)[0]
+            if twin == opcode and NAMES[opcode] in PLAIN:
+                twin = seven_to_zero_twin(opcode)[0]
+            if twin != opcode:
+                twins_of_others.add(twin)
+    tally: Counter = Counter()
+    for opcode in unrun:
+        name = NAMES[opcode]
+        if name in direct:
+            tally["every word of its family run by a manual-derived test"] += 1
+            continue
+        if opcode in LAST_WORDS:
+            tally["checked against the PRM 2.2 effective-address model"] += 1
+            continue
+        twin = opcode
+        if name != "movem":
+            twin = canonical_twin(opcode)[0]
+            if twin == opcode and name in PLAIN:
+                twin = seven_to_zero_twin(opcode)[0]
+        if twin == opcode and opcode in twins_of_others:
+            tally["its own twin, compared as the twin of other words"] += 1
+        elif twin == opcode:
+            tally["no renamed twin: run by the direct manual-derived tests"] += 1
+        elif twin in executed:
+            tally["renamed twin run by the gate: the gate's evidence transfers"] += 1
+        else:
+            tally["renamed twin not run by the gate: symmetry only"] += 1
+    print("\n## The words the gate never runs, by the evidence that now reaches them\n", file=out)
+    for key, count in tally.most_common():
+        print(f"{count:6,}  {key}", file=out)
 
 
 def combinations(pattern: str, words: list[int], run: set[int]) -> list[str]:
