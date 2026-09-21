@@ -103,7 +103,7 @@ What the numbers do and do not say:
 | M3 | masking | `ADDQ`/`SUBQ #,An` without the 32-bit mask | no case carries An across 0 or $FFFFFFFF | test written (PRM 4-11); killed in phase 3 |
 | D7 | division | `DIVU` 0/0 does not trap | every divide-by-zero test had a nonzero dividend | test written (PRM 4-96); killed |
 | D9 | division | divide-by-zero entry 4 clocks short | the gate has no divide by zero; no test asserted its clocks | test written (UM Table 8-14: 38 + EA); killed |
-| D10 | division | `DIVS` by zero sets N where the core sets Z | the flags are undefined in PRM, and no test asserts them | **open**, below |
+| D10 | division | `DIVS` by zero sets N where the core sets Z | the flags are undefined in PRM, and no test asserts them | **killed 2026-09-21** by tests/test_referee_evidence.py (WinUAE's tester core, run: T2), below |
 | SP12 | supervisor | level 7 re-taken each time the host sets 7 again | the scenario set the level once | test written (UM 6.3.2); killed |
 | CY10 | clocks | E-clock wait boundary moved from phase 7 to 8 | the existing phase test accepts any varying set (see below) | test written (MAME 0.285, T3); killed |
 
@@ -127,6 +127,12 @@ survive, the other five are killed.
   68000 core on DIVU/DIVS by zero across dividend signs and magnitudes (T2,
   run rather than read), or better, a hardware run -- transistorfet's
   68k-test-runner or WinUAE `cputest` on a real 68000.
+  **Settled at T2, 2026-09-21:** WinUAE's CPU-tester core, built from the
+  pinned source and run ([referees](referees.md)), gives the core's flags
+  for DIVU and DIVS by zero on all 20 inputs tried (5 dividend shapes, CCR
+  all clear and all set), inside the scope cputest checks on hardware.
+  `tests/test_referee_evidence.py::test_divide_by_zero_flags` pins them;
+  `scripts/mutate.py run --only D10` now reports D10 killed (65 s, PyPy).
 - **N7** and **M8**: equivalent (below).
 
 ### Equivalent mutants

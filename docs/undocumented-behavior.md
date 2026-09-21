@@ -66,7 +66,13 @@ version not pinned here, `[unverified]`).
 | WinUAE cycle model (Cwik) | T2 | "absolute overflow" (|dividend|>>16 ≥ |divisor|) is detected early at 16–18 clocks; signed overflow is not detected prematurely, 120–156 clocks |
 
 Divide by zero: "DIVS always sets Z-flag" per WinUAE's changelog
-(`[unverified]`, same caveat as above).
+(`[unverified]`, same caveat as above).  **Run 2026-09-21:** WinUAE's
+CPU-tester core, built from `1977af5` and run on DIVU and DIVS by zero
+([referees](referees.md)), gives DIVS: Z set, N V C clear; DIVU: N from bit
+31 of the dividend, Z if its upper word is zero, V C clear; X kept.  The
+changelog line is at 4.3.0 in the pinned `od-win32/winuaechangelog.txt`.
+T2 by running (inside cputest's checked scope); pinned by
+tests/test_referee_evidence.py.  Musashi (T3, run) leaves every flag.
 
 ## Flags after CHK
 
@@ -137,6 +143,12 @@ documented:
   m68000 corpus records it, WinUAE reproduces it (cputest verifies "68000/010
   bus address error" frames on hardware). Neither Motorola manual gives a
   rule. T2 via WinUAE, T3 via the corpus; `[unverified]` here as a rule.
+  **Run 2026-09-21** ([referees](referees.md)): WinUAE's tester core agrees
+  with the gate's stacked PC everywhere except three families -- JSR through
+  (d16,An), (d8,An,Xn), (d16,PC), (d8,PC,Xn) (WinUAE: 2 less), MOVEM through
+  (d8,An,Xn), (d8,PC,Xn) (4 less) and DBcc (the target + 2) -- and it leaves
+  An unmoved when a word (An)+ operand faults, where the gate has moved it.
+  The core follows the gate; each is an open question (docs/worklog.md).
 - **Bits 15–5 of the access-information word** at `SSP+0` are undefined in
   Figure 6-7. WinUAE's cputest readme says the 68000's are "complete"
   including "CCR modification undocumented behavior". This project will

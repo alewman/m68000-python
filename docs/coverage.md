@@ -242,6 +242,35 @@ into a test of what the core happens to do.
    and a WinUAE reading give three different answers), and the stacked PC
    of operand address errors against WinUAE case by case.
 
+**Put to the referees (2026-09-21, [referees](referees.md)).**  WinUAE's
+CPU-tester core (T2 inside cputest's checked scope) and Musashi (T3) were
+built and run on each gap:
+
+- Gap 1, divide-by-zero flags: **settled at T2 by running** (WinUAE gives
+  the core's flags on all 20 inputs); pinned in
+  tests/test_referee_evidence.py, which kills mutant D10.
+- Gap 2, ILLEGAL's stacked PC: **settled at T2 by running** (the word's own
+  address, 34 clocks, for $4AFC, $4AFA, $4AFB, $4E7B and line A/F); pinned.
+- Gap 3, bus errors: frames of data-read and prefetch bus errors agree in
+  the cases pinned (7); a sweep over the gate's states finds WinUAE
+  disagreeing with the core's bus-error model in named classes (90% of
+  read faults agree, 33% of prefetch and write faults) -- open, not
+  changed.  The I/N case: WinUAE (run) and MAME's microcode (read) clear I/N
+  for faults during TRAP, TRAPV, CHK and divide-by-zero processing, the core
+  sets it, and an existing test asserts it for TRAP: open for Aubrey.
+  TRAPV's IR in that frame was a core bug, fixed (6ec31b4 test, e057279 fix).
+- Gap 4, CHK flags at Dn = 0: **settled at T2 by running** for the rule;
+  pinned.
+- Gap 5, clocks: ADDQ.W #,An = 8 and an address error = 58 are **T2 by
+  running** (the differences from the manual exceed cputest's ±2); CHK's
+  trap at 38 against the manual's 40 is inside ±2: undecided.
+- Gap 6, double bus fault: outside cputest's scope (it skips halting
+  tests).  WinUAE's emulator (read) and Musashi (run, odd SSP) halt, MAME
+  does not: T3 either way.
+- Gap 8: DBcc's stacked PC -- WinUAE, run, stacks the target + 2 against the
+  gate's instruction + 4, a T2 conflict with the gate (open); operand
+  address errors are re-derived case by case in referees.md.
+
 ## 5. What the coverage work found
 
 - **A core bug**, invisible to both corpora: with T set, an illegal word, a

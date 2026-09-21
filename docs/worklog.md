@@ -106,6 +106,77 @@ Added 2026-09-21 (coverage and mutation session):
    halt (UM 5.4.4). If MAME's behaviour were ever preferred, that test is
    the one to revisit.
 
+Added 2026-09-21 (referees session; docs/referees.md has the evidence).
+What running WinUAE's CPU-tester core and Musashi said about the questions
+above: 1 (DBcc) -- WinUAE stacks the target + 2, inside its checked scope:
+now question 12; 2 (CHK 8 or 10) -- WinUAE, CLK and Musashi say 10, MAME 8,
+a 2-clock difference inside cputest's +-2, so still undecided; 3 and 11
+(double fault) -- outside cputest's scope; WinUAE's emulator (read) and
+Musashi (run, odd SSP) halt, MAME does not; the test stands; 4 and 10
+(divide-by-zero flags) -- **settled at T2 by running** and pinned
+(tests/test_referee_evidence.py; mutant D10 killed); 5 (operand
+address-error PCs) -- WinUAE agrees with the core except in the families of
+questions 13-15.  In every conflict below the core follows the gate and is
+unchanged; each needs Aubrey's decision.
+
+12. **DBcc to an odd target: target + 2 (WinUAE, T2 by running) or the
+   instruction + 4 (gate, MAME).**  632 gate cases; 1,964 680x0 cases where
+   CLK stacks the target.  In scope: WinUAE changelog 4.3.0, 68000 list:
+   "DBcc and odd offset ... UAE: Address error stacked PC was wrong" (fixed
+   against hardware).  The core follows the gate.
+13. **A word (An)+ operand that faults: is An moved?**  WinUAE (T2 by
+   running; changelog 4.3.0 "An contents are updated (or not updated) if
+   -(an) or (an)+", the AESRC preset checks registers): not moved.  The gate
+   (4,330 cases in 32 files) and CLK (14,148 680x0 cases): moved.  This is
+   the largest conflict and touches every word (An)+ address error the gate
+   records.  The core follows the gate.
+14. **JSR through (d16,An), (d8,An,Xn), (d16,PC), (d8,PC,Xn) to an odd
+   target, and MOVEM through (d8,An,Xn), (d8,PC,Xn) at an odd address:
+   the stacked PC.**  WinUAE (T2 by running): 2 less for those JSRs (762
+   gate cases; 2,580 680x0 cases where CLK differs from both), 4 less for
+   those MOVEMs (306 gate cases; 1,069 680x0 cases where WinUAE agrees
+   with CLK).  JMP, and JSR through (An), (xxx).W, (xxx).L, agree.  The core
+   follows the gate.
+15. **CMPM.L (An)+,(An)+ that faults: An.**  WinUAE (T2 by running) leaves
+   the faulting register 2 less than the gate does in 115 gate cases, and
+   differs from both the core and CLK in 373 680x0 cases.  The core follows
+   the gate.
+16. **MOVE.W to -(An) whose write faults, when the word now in IR is illegal
+   or privileged: I/N.**  WinUAE (T2 by running; changelog 4.3.0 "CPU bug
+   found and emulated ... this only happens if following instruction would
+   cause illegal instruction, privilege violation or trace is pending"): 1.
+   Gate (35 cases) and CLK (85): 0.  The same rule, applied to bus errors,
+   is most of the prefetch and write differences in question 19.
+17. **I/N for a fault during group 2 exception processing** (TRAP, TRAPV,
+   CHK, divide by zero with an odd vector or SSP).  WinUAE (T2 by running,
+   ODDEXC preset) and MAME 0.285's microcode (T3, read: those instructions'
+   own microcode stacks and refills without SSW_N; the illegal, privilege,
+   line A/F, trace and interrupt states set it) give 0; the core gives 1,
+   and `tests/test_coverage_gaps.py::test_an_address_error_inside_exception_processing_sets_i_slash_n`
+   asserts 1 for TRAP #0, reading UM 6.3.9.1's "not an instruction".  The
+   session's rules forbid weakening that test, so the core is unchanged.
+   Should the test be changed to the two emulators' rule (1 for group 1,
+   0 for group 2)?  TRAPV's IR in the same frame was a separate bug and is
+   fixed (6ec31b4, e057279).
+18. **Two 2-clock differences inside cputest's tolerance**: MOVE to -(An)
+   whose write faults (WinUAE +2: 228 gate cases) and CHK's negative-Dn trap
+   (question 2).  T2 cannot decide either; the gate's values stand.  A
+   logic-analyser capture would.
+19. **The bus-error model.**  No corpus pins BERR; the core's is its
+   address-error model extended.  Over the gate's own states with BERR
+   injected (validation/referees/bus_errors.py), WinUAE -- T2 for read and
+   prefetch bus errors, re-verified on hardware in 2020 -- agrees on 90% of
+   data-read faults and 33% of prefetch and write faults; the rest fall into
+   named classes (docs/referees.md, "Bus errors"): the I/N rule of question
+   16; instructions whose closing prefetch precedes their ALU step, where
+   WinUAE stacks the instruction itself and has not yet written flags or
+   register; and a few stacked PCs (LINK, RTS, MOVE to (An)/(An)+).
+   Matching it means reordering the closing prefetch against the writes in
+   most handlers.  Not attempted: is it wanted, with one lineage to check it?
+20. **The RTE/RTR row of the rung 5 table was labelled T2.**  The order of
+   bus reads is not something cputest checks; running WinUAE agrees with
+   the core's order, but that is T3.  validation.md now says so.
+
 ## Log
 
 ### Rung 1 (2026-09-19)
@@ -340,3 +411,65 @@ failing test commit and then a separate fix commit.
   code, defensive asserts and 4 dead lines. docs/coverage.md.
 - Suite: 415 tests, CPython 3.14.4 about 11 s, PyPy 7.3.23 about 14 s (the
   corpus gate included), on the loaded machine.
+
+## Referees (2026-09-21)
+
+The brief for this session (from Aubrey, 2026-09-21): turn "T2 by reading"
+into running.  Build WinUAE's 68000 core (the T2 referee) and Musashi (an
+independent T3 lineage), calibrate each against the gate before trusting
+it, put every open question to them, and re-derive the rung 5 table by
+running.  Hard rules: no majority vote; no core change that would break the
+gate; a gate-conflict inside WinUAE's checked scope goes to Aubrey; a core
+bug the gate does not pin gets a failing test commit, then a fix commit;
+nothing third-party committed.
+
+### Building (b3ac8ed)
+
+- `validation/referees/build_referees.py` fetches WinUAE `1977af50` and
+  Musashi `313ebf1b` as GitHub archives into ignored `src/` and builds into
+  ignored `build/` (about 20 s, 8 jobs, `nice`).  WinUAE: its CPU tester's
+  own 68000 core (gencpu with CPU_TESTER on -> `cpuemu_90_test.cpp`), driven
+  by `winuae_referee.cpp`, which `#include`s the tester's `cputest.cpp`.
+  Two Unix adjustments, made to copies: od-unix's inline `cctrue()`, and a
+  char overload for `wprintf`.  Hatari (same lineage) was not built.
+- Harness bugs found and fixed while calibrating, before any use: frames
+  built through the 24-bit mask landed at $3FA (test region now ends 1 KB
+  short of 16 MB); Musashi's first `m68k_execute` spends the reset's clocks;
+  a STOP left Musashi stopped for the next case; a vector-fetch detector
+  misread MOVEM (xxx).W's reads of low memory as an exception; the tester's
+  bus-error check compares 32-bit addresses.
+
+### Calibration (docs/referees.md)
+
+- WinUAE vs the gate: **308,416 / 314,988 judged cases agree**; the 6,572
+  others are address errors and 2-clock differences in six named classes,
+  none an ordinary case.  vs CLK where core and CLK agree: 779,253 /
+  779,253 judged.  56 s (PyPy).
+- Musashi vs the gate: **257,300 / 261,894 judged**; every difference is an
+  undefined or disputed rule a higher tier decides (BCD N/V, DIV overflow
+  and CHK flags, LINK A7, three line F words).  vs CLK: 807,147 / 821,973.
+
+### Questions and the 680x0 table (c7e019e)
+
+- `questions.py`, `rerun_680x0.py` (all 1,000,060 cases, 124 s with 4
+  jobs), `bus_errors.py` (400,041 injected faults over the gate's states,
+  154 s).  Results in docs/referees.md; validation.md's rung 5 table has a
+  new column, what running WinUAE said, row by row.
+
+### Tests and two core bugs
+
+- 4ea03cf: `tests/test_referee_evidence.py`, T2 by running inside
+  cputest's scope: divide-by-zero flags (kills mutant D10), CHK with Dn =
+  0, illegal words' PC and clocks, 7 bus-error frames.
+- **TRAPV's IR** (6ec31b4 test, e057279 fix): a taken TRAPV refilled the
+  queue and handed the next opcode to the decoder before stacking its
+  frame, so a fault during the trap (odd vector) stacked the next opcode as
+  IR.  WinUAE (run, ODDEXC scope) and MAME's microcode (read) keep TRAPV.
+  The gate has no such case.
+- **TAS and BERR** (309f09e test, 36862e5 fix): a BusError raised by the
+  host on TAS's write half escaped `step()` instead of becoming the bus
+  error exception (UM 6.3.9.1; the host contract).  Found when the
+  bus-error sweep crashed on it.
+- Suite: 448 tests pass on CPython 3.14.4 and PyPy 7.3.23, the 317,500 gate
+  cases included.
+

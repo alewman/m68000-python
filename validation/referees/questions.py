@@ -282,7 +282,7 @@ def q_bus_error(ref: Referees) -> None:
         "MOVE.W -(A0),D0, -(A0) faults": state([0x3020], a={0: 0x880002}),
         "NOP at $87FFFC, its prefetch of $880000 faults": state([0x4E71], pc=0x87FFFC),
         "JMP (A0) to $880000 (target fetch faults)": state([0x4ED0], a={0: 0x880000}),
-        "ADD.W D0,(A0), the write faults": state(
+        "ADD.W D0,(A0), read and write fault (the read first)": state(
             [0xD150], a={0: 0x880000}
         ),  # read also faults first
     }
