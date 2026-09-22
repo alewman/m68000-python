@@ -225,6 +225,23 @@ class M68000CPU(
 
     # -- execution ------------------------------------------------------------
 
+    @property
+    def step_clocks(self) -> int:
+        """Clocks the step in progress has spent so far (read-only).
+
+        Read from inside a bus callback, it counts the access being made as
+        complete: that access occupies clocks ``step_clocks - 4`` to
+        ``step_clocks`` of the step, so ``clock + step_clocks - 4`` is when it
+        began on the host's running count.  A host that stalls the CPU (a
+        wait state, a device holding the bus) uses it to place the stall at
+        the right clock; the core itself does not model wait states, so the
+        host adds its own stall clocks to the ``step()`` total.  Inside an
+        ``acknowledge`` callback the acknowledge cycle's own four clocks are
+        not yet counted.  Between steps it is the last ``step()``'s (or
+        ``reset()``'s) total.
+        """
+        return self._cycles
+
     def step(self) -> int:
         """Run one instruction or one exception entry; return its clock count.
 
@@ -235,6 +252,7 @@ class M68000CPU(
         instruction in IR runs.
         """
         if self.halted:
+            self._cycles = 4
             self.clock += 4
             return 4
         self._cycles = 0

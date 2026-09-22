@@ -99,7 +99,10 @@ write half (the Genesis bus drops it); `address_error(address, write, fc)`
 is told about an access an address error aborted. A host raises `BusError`
 from a callable to assert BERR. The core never allocates memory, never
 schedules a frame and never assumes it owns time: `step()` returns clocks and
-the host decides everything else.
+the host decides everything else. Inside a callable, `cpu.step_clocks` says
+where in the step the access falls (it ends at that clock), which a board
+needs to stall the CPU at the right point; the core models no wait states,
+so the host adds its own stall clocks to the step's total.
 
 Speed, on the loop in `benchmarks/speed.py` (a shared, loaded machine):
 about 0.6-0.7 million instructions per second on CPython 3.14 and about 20

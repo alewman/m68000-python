@@ -109,6 +109,11 @@ the same implementation are one confirmation.
   order, and CLK reads RTE's and RTR's stack in a different order. The
   lockstep shows real games run identically to MAME. That confirms
   integration with the gate's lineage, not correctness independent of it.
+- **The clock at which each access ends within its step**
+  (`step_clocks`, read inside a callable): equal to the gate's transaction
+  lengths and idle clocks for every one of the 261,894 cases without an
+  address error (`tests/test_step_clocks.py`). Same lineage as the bus
+  order above, so the same strength.
 - **Trace**:
   - trace as its own boundary after the traced instruction;
   - no trace after an instruction that never executed (illegal, line A/F,
