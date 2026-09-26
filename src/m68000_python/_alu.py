@@ -16,8 +16,8 @@ Only the operand read can fault in a read-modify-write: the write goes to
 the address the read already proved even.
 """
 
-from m68000_python._core import MASK, MSB, VECTOR_BUS_ERROR, BusError, C, N, V, X, Z
-from m68000_python._ea import AN, DN, EA_KIND, IMM, sign_extend_16
+from m68000_python._core import MASK, VECTOR_BUS_ERROR, BusError, N, V, X, Z
+from m68000_python._ea import AN, DN, EA_KIND, IMM, sign_extend_16, word_to_long
 
 #: Bits 7-6 of the common size field (PRM Section 8): 00 byte, 01 word, 10 long.
 SIZE = (1, 2, 4, 0)
@@ -237,7 +237,7 @@ class ALUMixin:
         kind = EA_KIND[opcode & 0x3F]
         source = self._ea_read(kind, opcode & 7, size)
         if size == 2:
-            source = sign_extend_16(source) & 0xFFFFFFFF
+            source = word_to_long(source)
         return source, kind
 
     def _address_idle(self, opcode: int, kind: int) -> None:
@@ -654,6 +654,3 @@ class ALUMixin:
             self.R[dn] = ((remainder & 0xFFFF) << 16) | (quotient & 0xFFFF)
             self._flags_logic(quotient & 0xFFFF, 2)
         self._prefetch()
-
-
-__all__ = ["MSB", "C", "N", "V", "X", "Z"]

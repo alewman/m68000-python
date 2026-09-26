@@ -10,7 +10,6 @@ space (SST MOVEtoSR, ORItoSR, ANDItoSR, EORItoSR; T3).
 
 from m68000_python._core import (
     CCR_BITS,
-    MASK24,
     VECTOR_CHK,
     VECTOR_ILLEGAL,
     VECTOR_LINE_A,
@@ -302,17 +301,14 @@ class SystemMixin:
 
         The pulse is 124 clocks; the instruction takes 132 in all (UM Table
         8-12): 128 before the closing prefetch, as SST RESET records.  The
-        processor itself is not reset.  A host that wants to see the pulse sets
-        ``reset_devices``, called with no arguments.
+        processor itself is not reset.  A host that wants to see the pulse
+        passes ``reset_devices`` to the constructor; it is called with no
+        arguments.
         """
         if not self.SR & S:
             self._privilege_violation()
             return
         self._cycles += 128
-        callback = getattr(self, "reset_devices", None)
-        if callback is not None:
-            callback()
+        if self._reset_devices is not None:
+            self._reset_devices()
         self._prefetch()
-
-
-__all__ = ["MASK24"]

@@ -37,7 +37,6 @@ FC_USER_DATA = 1
 FC_USER_PROGRAM = 2
 FC_SUPERVISOR_DATA = 5
 FC_SUPERVISOR_PROGRAM = 6
-FC_CPU_SPACE = 7
 
 # Exception vectors (UM Table 6-2).
 VECTOR_BUS_ERROR = 2
@@ -59,8 +58,7 @@ VECTOR_TRAP_BASE = 32
 AUTOVECTOR = -1
 SPURIOUS = -2
 
-#: Operand sizes in bytes, and their masks and sign bits.
-BYTE, WORD, LONG = 1, 2, 4
+#: Operand sizes in bytes (1, 2, 4) index their masks and sign bits.
 MASK = {1: 0xFF, 2: 0xFFFF, 4: 0xFFFFFFFF}
 MSB = {1: 0x80, 2: 0x8000, 4: 0x80000000}
 
@@ -104,6 +102,7 @@ class CoreMixin:
         function_codes: bool,
         tas_write: WriteFunction | None,
         address_error: Callable[[int, bool, int], None] | None,
+        reset_devices: Callable[[], None] | None,
     ) -> None:
         # R[0..7] are D0-D7, R[8..15] are A0-A7; A7 is the active stack
         # pointer and the inactive one waits in _other_sp (PRM 1.3).
@@ -143,6 +142,7 @@ class CoreMixin:
 
         self._acknowledge = acknowledge
         self._address_error_hook = address_error
+        self._reset_devices = reset_devices
         self.function_codes = function_codes
         self.tas_write = tas_write
         self.attach_bus(read_byte, read_word, write_byte, write_word)
@@ -171,7 +171,7 @@ class CoreMixin:
             self._read_program = lambda address: read_word(address, fc=self._fc(True))
             self._read_data_word = lambda address: read_word(address, fc=self._fc(False))
             self._read_data_byte = lambda address: read_byte(address, fc=self._fc(False))
-            self._read_program_byte_host = lambda address: read_byte(address, fc=self._fc(True))
+            self._read_program_byte = lambda address: read_byte(address, fc=self._fc(True))
             self._write_data_word = lambda address, value: write_word(
                 address, value, fc=self._fc(False)
             )
@@ -182,7 +182,7 @@ class CoreMixin:
             self._read_program = read_word
             self._read_data_word = read_word
             self._read_data_byte = read_byte
-            self._read_program_byte_host = read_byte
+            self._read_program_byte = read_byte
             self._write_data_word = write_word
             self._write_data_byte = write_byte
         if tas_write is None:
@@ -324,7 +324,7 @@ class CoreMixin:
         if size == 1:
             self._cycles += 4
             try:
-                return self._read_program_byte_host(address & MASK24)
+                return self._read_program_byte(address & MASK24)
             except BusError:
                 raise self._fault(VECTOR_BUS_ERROR, address, False, True) from None
         high = self._read_program_word(address)

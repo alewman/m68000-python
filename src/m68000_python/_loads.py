@@ -7,7 +7,6 @@ and ``(xxx).L`` writes between its two extension-word refills (UM Tables 8-2
 and 8-3; the order is the corpus's: SST MOVE.b/.w/.l, T3).
 """
 
-from m68000_python._core import MASK, MSB
 from m68000_python._ea import (
     ABSL,
     ABSW,
@@ -24,6 +23,7 @@ from m68000_python._ea import (
     PREDEC,
     sign_extend_8,
     sign_extend_16,
+    word_to_long,
 )
 
 #: MOVE's size field, bits 13-12 (PRM 4, MOVE): 01 byte, 11 word, 10 long.
@@ -31,7 +31,8 @@ MOVE_SIZE = {1: 1, 3: 2, 2: 4}
 
 
 class LoadsMixin:
-    """Private data-movement implementation."""
+    """Private data-movement implementation: MOVE and its kin, MOVEM, MOVEP, LEA,
+    PEA, LINK, UNLK, EXG, SWAP and EXT."""
 
     def _op_move(self, opcode: int) -> None:
         """MOVE -- destination <- source; N Z set, V C cleared (PRM 4-116; UM Tables 8-2, 8-3).
@@ -81,7 +82,7 @@ class LoadsMixin:
             address = self._index(R[8 + register])
         elif kind == ABSW:
             self._commit_pc()
-            address = sign_extend_16(self._extension()) & 0xFFFFFFFF
+            address = word_to_long(self._extension())
         elif source in (DN, AN, IMM):
             # (xxx).L from a register or immediate: both refills, then the write.
             high = self._extension()
@@ -162,7 +163,7 @@ class LoadsMixin:
             return
         if kind == ABSW:
             self._commit_pc()
-            address = sign_extend_16(self._extension()) & 0xFFFFFFFF
+            address = word_to_long(self._extension())
         elif from_register:
             high_address = self._extension()
             self._commit_pc()
@@ -192,7 +193,7 @@ class LoadsMixin:
         size = 2 if opcode >> 12 == 3 else 4
         value = self._ea_read(EA_KIND[opcode & 0x3F], opcode & 7, size)
         if size == 2:
-            value = sign_extend_16(value) & 0xFFFFFFFF
+            value = word_to_long(value)
         self.R[8 + ((opcode >> 9) & 7)] = value
         self._prefetch()
 
@@ -202,13 +203,6 @@ class LoadsMixin:
         self._flags_logic(value, 4)
         self.R[(opcode >> 9) & 7] = value
         self._prefetch()
-
-
-__all__ = ["AN", "MASK", "MSB"]
-
-
-class MultipleMixin:
-    """Private MOVEM, MOVEP, LEA, PEA, LINK, UNLK, EXG, SWAP, EXT implementation."""
 
     # -- MOVEM (PRM 4-128; UM Table 8-10) ---------------------------------------
 
@@ -244,7 +238,7 @@ class MultipleMixin:
                         high = read(address)
                         R[index] = (high << 16) | read(address + 2)
                     else:
-                        R[index] = sign_extend_16(read(address)) & 0xFFFFFFFF
+                        R[index] = word_to_long(read(address))
                     address = (address + size) & 0xFFFFFFFF
             read(address)  # one word past the last register
             if kind == POSTINC:
@@ -401,7 +395,7 @@ class MultipleMixin:
         """EXT -- sign-extend Dn's byte (EXT.W) or word (EXT.L) (PRM 4-106; UM Table 8-12)."""
         register = opcode & 7
         if opcode & 0x40:
-            value = sign_extend_16(self.R[register]) & 0xFFFFFFFF
+            value = word_to_long(self.R[register])
             self._flags_logic(value, 4)
             self.R[register] = value
         else:

@@ -14,7 +14,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from m68000_python._dispatch import NAMES
-from m68000_python._ea import EA_KIND
 from m68000_python._flags import CONDITION_NAMES
 
 WordReader = Callable[[int], int]
@@ -346,7 +345,6 @@ def disassemble_range(read_word: WordReader, start: int, end: int) -> list[Instr
 
 
 __all__ = [
-    "EA_KIND",
     "Instruction",
     "WordReader",
     "disassemble",

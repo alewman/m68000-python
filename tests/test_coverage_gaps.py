@@ -43,9 +43,11 @@ def with_vectors(**handlers):
     """A CPU at $1000 with every exception vector pointing at its own handler.
 
     Vector n lands at ``$2000 + 16n`` unless ``vN=address`` names another, so a
-    test can tell which exception was taken by where the PC ends up.
+    test can tell which exception was taken by where the PC ends up.  Other
+    keywords go to the constructor.
     """
-    cpu, bus = make([NOP] * 16)
+    options = {name: value for name, value in handlers.items() if not name.startswith("v")}
+    cpu, bus = make([NOP] * 16, **options)
     for vector in range(256):
         bus.set_long(vector * 4, handlers.get(f"v{vector}", HANDLER + 16 * vector))
     bus.load(HANDLER, [NOP] * 0x800)
@@ -918,12 +920,11 @@ def test_chk_with_a_zero_register_does_not_trap():
 def test_the_reset_instruction_calls_the_host_hook_and_changes_nothing_else():
     """RESET -- the RESET line is pulsed; the processor state is unaffected (PRM 6-83).
 
-    UM Table 8-12: 132 clocks.  The host sees the pulse through
-    ``reset_devices``; no corpus case sets it.
+    UM Table 8-12: 132 clocks.  The host sees the pulse through the
+    ``reset_devices`` keyword; no corpus case sets it.
     """
-    cpu, bus = with_vectors()
     pulses = []
-    cpu.reset_devices = lambda: pulses.append(True)
+    cpu, bus = with_vectors(reset_devices=lambda: pulses.append(True))
     restart(cpu, bus, [0x4E70, NOP], sr=0x2000)
     registers = list(cpu.R)
     assert cpu.step() == 132

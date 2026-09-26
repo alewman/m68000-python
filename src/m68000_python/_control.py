@@ -6,7 +6,6 @@ these numbers" in docs/timing.md).  A target at an odd address faults on the
 first of those reads.
 """
 
-from m68000_python._core import MASK
 from m68000_python._ea import (
     ABSL,
     ABSW,
@@ -19,6 +18,7 @@ from m68000_python._ea import (
     PCINDEX,
     sign_extend_8,
     sign_extend_16,
+    word_to_long,
 )
 from m68000_python._flags import CONDITION
 
@@ -145,25 +145,17 @@ class ControlMixin:
         if kind == DISP:
             return (R[8 + register] + sign_extend_16(self.irc)) & 0xFFFFFFFF
         if kind == INDEX:
-            return self._brief_index(R[8 + register])
+            return self._indexed(R[8 + register], self.irc)
         if kind == ABSW:
-            return sign_extend_16(self.irc) & 0xFFFFFFFF
+            return word_to_long(self.irc)
         if kind == ABSL:
             high = self._extension()
             return ((high << 16) | self.irc) & 0xFFFFFFFF
         if kind == PCDISP:
             return (self._pc - 2 + sign_extend_16(self.irc)) & 0xFFFFFFFF
         if kind == PCINDEX:
-            return self._brief_index(self._pc - 2)
+            return self._indexed(self._pc - 2, self.irc)
         raise AssertionError(f"not a control kind: {kind}")
-
-    def _brief_index(self, base: int) -> int:
-        """Apply the brief extension word waiting in IRC without consuming it."""
-        extension = self.irc
-        index = self.R[extension >> 12]
-        if not extension & 0x0800:
-            index = sign_extend_16(index)
-        return (base + index + sign_extend_8(extension)) & 0xFFFFFFFF
 
     def _op_jmp(self, opcode: int) -> None:
         """JMP -- PC <- effective address (PRM 4-108; UM Table 8-10)."""
@@ -214,6 +206,3 @@ class ControlMixin:
     def _op_nop(self, opcode: int) -> None:
         """NOP -- no operation (PRM 4-147; UM Table 8-12: 4 clocks, the prefetch)."""
         self._prefetch()
-
-
-__all__ = ["MASK"]

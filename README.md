@@ -80,7 +80,7 @@ where in the step the access falls (it ends at that clock), which a board
 needs to stall the CPU at the right point; the core models no wait states,
 so the host adds its own stall clocks to the step's total.
 
-Speed, on the loop in `benchmarks/speed.py` (a shared, loaded machine,
+Speed, on the `base` loop of `benchmarks/m68000_core_benchmark.py` (a shared, loaded machine,
 2026-09-25): about 1.25 million instructions per second on CPython 3.14.4
 and about 20 million on PyPy 7.3.20 (the Mega Drive's 68000 runs about 1
 million a second); on real game code under the lockstep the core is far
@@ -121,7 +121,7 @@ scripts/run_corpus.py        run corpus files and print failures
 scripts/coverage_report.py   what the corpora and the suite reach (docs/coverage.md)
 scripts/mutate.py            mutation testing of the suite (docs/mutation.md)
 scripts/fetch_test_vectors.py
-benchmarks/speed.py          instructions per second
+benchmarks/                  instructions per second, and a same-process A/B of two revisions
 docs/README.md               index of the documents
 docs/start-here.md           the processor primer
 docs/timing.md               cycle tables and host clocks

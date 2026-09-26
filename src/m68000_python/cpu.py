@@ -36,7 +36,7 @@ from m68000_python._core import (
 from m68000_python._dispatch import Handler, build_table
 from m68000_python._ea import EAMixin
 from m68000_python._flags import FlagsMixin
-from m68000_python._loads import LoadsMixin, MultipleMixin
+from m68000_python._loads import LoadsMixin
 from m68000_python._shifts import ShiftsMixin
 from m68000_python._system import SystemMixin
 from m68000_python.state import CPUState
@@ -48,7 +48,6 @@ class M68000CPU(
     BitsMixin,
     ControlMixin,
     LoadsMixin,
-    MultipleMixin,
     ShiftsMixin,
     SystemMixin,
     EAMixin,
@@ -77,6 +76,8 @@ class M68000CPU(
       docs/undocumented-behavior.md).  Defaults to ``write_byte``.
     * ``address_error(address, write, fc)``: told about the access an address
       error aborted, which never reaches the bus (UM 6.3.10).
+    * ``reset_devices()``: called when the RESET instruction pulses the RESET
+      line (PRM 6-83); the processor itself is not reset.
 
     A host raises :class:`BusError` from any bus callable to assert BERR.
     """
@@ -94,9 +95,11 @@ class M68000CPU(
         function_codes: bool = False,
         tas_write: WriteFunction | None = None,
         address_error: Callable[[int, bool, int], None] | None = None,
+        reset_devices: Callable[[], None] | None = None,
     ) -> None:
         for name, value in (("acknowledge", acknowledge), ("tas_write", tas_write),
-                            ("address_error", address_error)):  # fmt: skip
+                            ("address_error", address_error),
+                            ("reset_devices", reset_devices)):  # fmt: skip
             if value is not None and not callable(value):
                 raise TypeError(f"{name} must be callable or None")
         if type(function_codes) is not bool:
@@ -110,6 +113,7 @@ class M68000CPU(
             function_codes,
             tas_write,
             address_error,
+            reset_devices,
         )
         cls = type(self)
         if "_table" not in cls.__dict__:

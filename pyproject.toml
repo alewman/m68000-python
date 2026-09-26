@@ -35,5 +35,5 @@ known-first-party = ["m68000_python"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--strict-markers -ra"
-pythonpath = ["src", "tests"]
+pythonpath = ["src", "tests", "."]
 markers = ["corpus: SingleStepTests/m68000 files (fetched by scripts/fetch_test_vectors.py)"]
