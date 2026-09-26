@@ -26,34 +26,51 @@ what WinUAE's run decides, the claim rests on emulator-derived oracles
 (MAME's microcode transcription): strong detectors, not a hardware
 judgement.
 
-## Certification record: commit `812cd8d` (2026-09-25), release 0.1.0
+## Certification record: commit `1f43e0b` (2026-09-25), release 0.1.0
 
-Every gate, both interpreters, against the commit named above; the record
-is rerun and this heading updated at the release commit (the commits after
-it change documents, workflows and packaging). Linux x86_64, a shared
-32-core machine under other users' load (timings are upper bounds; "Speed"
-below has the load-independent comparison). CPython 3.14.4; PyPy 7.3.20 /
-Python 3.11.13.
+Every gate, both interpreters, against the commit that fixed the last core
+change of the polish round (a fault during the reset sequence halts). The
+commits after it on the release branch change documents only; `src/`,
+`tests/`, `validation/`, `scripts/`, `benchmarks/` and `examples/` are
+byte-identical to `1f43e0b`. Linux x86_64, a shared 32-core machine at a load
+average of 10-15 from other users (timings are upper bounds; "Speed" below
+has the load-independent comparison). CPython 3.14.4; PyPy 7.3.20 / Python
+3.11.13.
 
 | Gate | Tier | Pin | Result | CPython | PyPy |
 | --- | --- | --- | --- | ---: | ---: |
-| The whole suite (`pytest -q` with the corpus fetched): decoder, readability, BCD, the manual-derived and referee-pinned tests, the tooling, the gate and `step_clocks` | -- | -- | 2,148 passed | 20.6 s | 25.6 s |
+| The whole suite (`pytest -q` with the corpus fetched): decoder, readability, BCD, the manual-derived and referee-pinned tests, the tooling, the gate and `step_clocks` | -- | -- | 2,155 passed | 18.8 s | 34.9 s |
+| The fast suite (`pytest -q` deselecting `test_corpus.py` and `test_step_clocks.py`, what CI runs on five interpreters) | -- | -- | 1,898 passed | 5.1 s | -- |
 | BCD tables: ABCD 262,144 + SBCD 262,144 + NBCD 1,024 inputs, result and X N Z V C (`tests/test_bcd.py`) | T1 | flamewing/68k-bcd-verifier `39a01be528b0744302bf1dc9b3463fc22a3fc45f`, table SHA-256 `8432868c…80147e5` | all agree | 0.8 s | 0.9 s |
-| SingleStepTests/m68000, 127 files, 317,500 cases (`tests/test_corpus.py`) | T3 (microcode) | `64b253116a3de04aaac4346c43680960dc9b67e5` | 317,500 / 317,500 | 15 s | 14 s |
-| `step_clocks` at every access end of the 261,894 cases without an address error (`tests/test_step_clocks.py`) | T3 (microcode) | the same | all agree | (in the above) | |
-| WinUAE's CPU-tester core vs the gate, run (`validation/referees/calibrate.py winuae`) | T2 in scope | WinUAE `1977af50` | 308,416 / 314,988 judged | -- | 56 s |
-| Musashi vs the gate, run (`calibrate.py musashi`) | T3 | Musashi `313ebf1b` | 257,300 / 261,894 judged | -- | ~60 s |
-| SingleStepTests/680x0 as a detector (`scripts/classify_680x0.py`) | T3 | `e0d5ece9` | 787,660 / 1,000,060, every disagreement classified | -- | ~2 min |
-| MAME 0.285 lockstep, System 16B and Genesis Altered Beast (`validation/lockstep.py`, rung 4 below) | T3 | `mame0285` | 24,595,631 + 28,249,660 instructions identical | -- | 563 + 510 s |
-| Decoder: 65,536 first words vs MAME 0.285 `m68000.lst` (`scripts/check_decoder_vs_mame.py`, listing SHA-256 `9b4605ef…95631`) | T3 | `mame0285` | 45,815 defined + ILLEGAL + 8,192 line A/F, every word's family agrees, 0 of 65,536 differ | 4 s | -- |
+| SingleStepTests/m68000, 127 files, 317,500 cases (`tests/test_corpus.py`), and `step_clocks` at every access end of the 261,894 cases without an address error (`tests/test_step_clocks.py`) | T3 (microcode) | `64b253116a3de04aaac4346c43680960dc9b67e5` | 317,500 / 317,500; all agree | 14.8 s | 12.9 s |
+| Decoder: 65,536 first words vs MAME 0.285 `m68000.lst` (`scripts/check_decoder_vs_mame.py`, listing SHA-256 `9b4605ef…95631`) | T3 | `mame0285` | 45,815 defined + ILLEGAL + 8,192 line A/F, every word's family agrees, 0 of 65,536 differ | 1.9 s | -- |
+| WinUAE's CPU-tester core vs the gate, run (`validation/referees/calibrate.py winuae`) | T2 in scope | WinUAE `1977af501f6c3389c2eefe119ecb10c82d6582f3` | 308,416 / 314,988 judged (2,512 not judged); every residual an address-error or 2-clock class named in [referees](referees.md) | -- | 12 s |
+| Musashi vs the gate, run (`calibrate.py musashi`) | T3 | Musashi `313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd` | 257,300 / 261,894 judged; every difference an undefined or disputed rule a higher tier decides | -- | 13 s |
+| The open questions put to both referees (`validation/referees/questions.py`) | T2/T3 | the same | the tables of [referees](referees.md), unchanged | -- | 5 s |
+| SingleStepTests/680x0 as a detector (`scripts/classify_680x0.py`) | T3 | `e0d5ece9670205cc84a0101081837deb446f86a3` | 787,660 / 1,000,060 agree; every disagreement classified, none `UNCLASSIFIED` | -- | 30 s |
+| MAME 0.285 lockstep, System 16B `altbeast`, 30 emulated seconds (`validation/lockstep.py compare altbeast --tag 30s`) | T3 | `mame0285`, romset `altbeast` | 24,595,631 instructions identical, 1,791 interrupts, 1 reset; every interrupt entry's clocks agree at all ten E-clock phases | -- | 104 s |
+| MAME 0.285 lockstep, Genesis Altered Beast, 40 emulated seconds (`compare genesis`) | T3 | the same; ROM SHA-1 `38945360…9b32f019` | 28,249,660 instructions identical (and the state before the 28,249,661st, where MAME stopped), 3,788 interrupts | -- | 114 s |
+| Coverage: first words the suite executes (`scripts/coverage_report.py encodings --suite`) | -- | -- | all 45,815 defined words (the gate alone: 38,019) | -- | see [coverage](coverage.md) |
+| Coverage: core statements the suite runs (`coverage_report.py lines --suite`) | -- | -- | 1,464 of 1,484 in the 12 core modules; the 20 unrun are import-time code and defensive asserts, no dead line | 49 s | -- |
+| Mutation: 176 seeded mutants (`scripts/mutate.py run`, `escalate`, `report`; 4 jobs) | -- | -- | 174 / 176 killed; the two survivors, N7 and M8, are [equivalent](mutation.md) | -- | 14 min (run 740 s + escalate 105 s, 4 jobs) |
 
 Commands, from the repository root with the corpus fetched
-(`python scripts/fetch_test_vectors.py`):
+(`python scripts/fetch_test_vectors.py`, and `--with-680x0` for the
+detector) and the referees built (`python validation/referees/build_referees.py`):
 
 ```text
+python -m pytest -q
 python -m pytest -q tests/test_bcd.py tests/test_corpus.py tests/test_step_clocks.py
 python scripts/run_corpus.py --all            # the same comparison, one line per file
 python scripts/check_decoder_vs_mame.py       # the decoder against MAME's listing
+python validation/referees/calibrate.py winuae
+python validation/referees/calibrate.py musashi
+python validation/referees/questions.py
+python scripts/classify_680x0.py
+python validation/lockstep.py compare altbeast --tag 30s     # needs MAME 0.285 and the romset
+python scripts/coverage_report.py encodings --suite
+python scripts/coverage_report.py lines --suite
+python scripts/mutate.py run --jobs 4 --out R.json && python scripts/mutate.py escalate R.json && python scripts/mutate.py report R.json
 ```
 
 `M68000_BCD_TABLE=path/to/bcd-table.bin` makes the BCD gate compare byte by
@@ -62,50 +79,12 @@ any C++ compiler and run it); without it the gate compares SHA-256.
 
 What a reader cannot reproduce from the repository alone: the MAME lockstep
 and `validation/disasm_vs_mame.py` need MAME 0.285 and the `altbeast`
-romset or the Genesis ROM (their command lines are below; the disassembly
-golden they wrote is committed and checked in CI); the transistorfet T1 row
-in the summary below rests on reading that project's README, not on a run
-here. Everything else has its command in this page, in
+romset or the Genesis ROM (their command lines are in rung 4 below; the
+disassembly golden they wrote is committed and checked in CI); the
+transistorfet T1 row in the summary below rests on reading that project's
+README, not on a run here. Everything else has its command above or in
 [referees](referees.md), [coverage](coverage.md) or [mutation](mutation.md),
 and the weekly Oracles workflow reruns it.
-
-## Speed
-
-Measured with `benchmarks/compare_revisions.py`, the same-process A/B of two
-revisions: each is imported into one interpreter and the four workloads of
-`benchmarks/m68000_core_benchmark.py` are timed alternately, best of 30 in
-CPU time, so the shared machine's load (which moves separate runs by ±30%)
-cannot bury a small change. The polish round's ladder (2026-09-25), one
-commit per rung, every oracle green at each, a rung gaining under 5% on both
-interpreters reverted:
-
-| Rung | Change | CPython 3.14.4: base / memory / arithmetic / exceptions | PyPy 7.3.20 | Outcome |
-| --- | --- | --- | --- | --- |
-| A | `MASK` and `MSB` as tuples indexed by size, not dicts | x1.027 / 1.000 / 1.021 / 0.984 | x1.353 / 1.047 / 1.172 / 1.021 | kept |
-| B | the A7 byte step written out at its ten call sites instead of `_step_size` | x1.013 / 0.997 / 0.997 / 1.003 | x0.978 / 0.911 / 1.009 / 1.000 | reverted |
-| C | the three refills read the program word themselves instead of calling `_read_program_word` | x1.060 / 1.033 / 1.046 / 1.046 | x1.013 / 1.010 / 0.987 / 1.009 | kept |
-| D | the flag rule computed inside `_add` instead of in `_flags_add` (prototype on ADD alone) | x1.022 / 0.992 / 0.995 / 0.977 | x0.995 / 1.009 / 0.990 / 0.998 | not adopted: below the rule, and the coverage probe and 17 mutants observe `_flags_*` |
-| E | the six function-code wrappers built once | not measurable: they run only for a host that passes `function_codes=True`, which the benchmark host and every board do not | | declined |
-
-Dispatch was already one 65,536-entry table and SR one packed int before
-the ladder; what remains is Python frame depth (a memory-operand ALU
-instruction is eight to nine frames), which only a different core shape
-would remove. The ladder's total, rung A times rung C: CPython base x1.09,
-PyPy base x1.37.
-
-Absolute rates after the ladder, `benchmarks/m68000_core_benchmark.py`
-(median of 5 samples in wall time, warm, load average about 12 on the
-shared machine; the A/B's best-of-30 CPU-time samples run higher):
-
-| Workload | CPython 3.14.4 | PyPy 7.3.20 |
-| --- | ---: | ---: |
-| base (a copy loop through (An)+, DBF) | 1.39 M instr/s | 32.9 M |
-| memory (long moves, MOVEM, PEA) | 0.65 M | 18.7 M |
-| arithmetic (MULU, DIVU, shifts, ABCD) | 1.18 M | 19.1 M |
-| exceptions (TRAP #0, RTE) | 1.32 M | 33.5 M |
-
-A Mega Drive's 68000 executes about 1 million instructions a second, so
-PyPy runs the core well above real time and CPython near it.
 
 ### What each corpus case compares
 
@@ -149,6 +128,44 @@ order of every bus access is compared).
   the corpus records (T3) and [undocumented-behavior](undocumented-behavior.md)
   now states: the stacked PC, the IR and access-information words, the
   halfway flags of a long, when (An)+ and -(An) move, and the clock cost.
+
+## Speed
+
+Measured with `benchmarks/compare_revisions.py`, the same-process A/B of two
+revisions: each is imported into one interpreter and the four workloads of
+`benchmarks/m68000_core_benchmark.py` are timed alternately, best of 30 in
+CPU time, so the shared machine's load (which moves separate runs by ±30%)
+cannot bury a small change. The polish round's ladder (2026-09-25), one
+commit per rung, every oracle green at each, a rung gaining under 5% on both
+interpreters reverted:
+
+| Rung | Change | CPython 3.14.4: base / memory / arithmetic / exceptions | PyPy 7.3.20 | Outcome |
+| --- | --- | --- | --- | --- |
+| A | `MASK` and `MSB` as tuples indexed by size, not dicts | x1.027 / 1.000 / 1.021 / 0.984 | x1.353 / 1.047 / 1.172 / 1.021 | kept |
+| B | the A7 byte step written out at its ten call sites instead of `_step_size` | x1.013 / 0.997 / 0.997 / 1.003 | x0.978 / 0.911 / 1.009 / 1.000 | reverted |
+| C | the three refills read the program word themselves instead of calling `_read_program_word` | x1.060 / 1.033 / 1.046 / 1.046 | x1.013 / 1.010 / 0.987 / 1.009 | kept |
+| D | the flag rule computed inside `_add` instead of in `_flags_add` (prototype on ADD alone) | x1.022 / 0.992 / 0.995 / 0.977 | x0.995 / 1.009 / 0.990 / 0.998 | not adopted: below the rule, and the coverage probe and 17 mutants observe `_flags_*` |
+| E | the six function-code wrappers built once | not measurable: they run only for a host that passes `function_codes=True`, which the benchmark host and every board do not | | declined |
+
+Dispatch was already one 65,536-entry table and SR one packed int before
+the ladder; what remains is Python frame depth (a memory-operand ALU
+instruction is eight to nine frames), which only a different core shape
+would remove. The ladder's total, rung A times rung C: CPython base x1.09,
+PyPy base x1.37.
+
+Absolute rates after the ladder, `benchmarks/m68000_core_benchmark.py`
+(median of 5 samples in wall time, warm, load average about 12 on the
+shared machine; the A/B's best-of-30 CPU-time samples run higher):
+
+| Workload | CPython 3.14.4 | PyPy 7.3.20 |
+| --- | ---: | ---: |
+| base (a copy loop through (An)+, DBF) | 1.39 M instr/s | 32.9 M |
+| memory (long moves, MOVEM, PEA) | 0.65 M | 18.7 M |
+| arithmetic (MULU, DIVU, shifts, ABCD) | 1.18 M | 19.1 M |
+| exceptions (TRAP #0, RTE) | 1.32 M | 33.5 M |
+
+A Mega Drive's 68000 executes about 1 million instructions a second, so
+PyPy runs the core well above real time and CPython near it.
 
 ## Rung 4: MAME 0.285 lockstep on real code
 
@@ -272,7 +289,7 @@ ten E-clock phases once the acknowledge adds MAME's one clock after VPA
 (`vpa_sync`, `vpa_after` in m68000.cpp): 44 clocks plus 5 to 14 of E-clock
 wait for an autovector, 44 for a vectored acknowledge (UM Table 8-14).
 
-## Coverage and mutation (2026-09-21)
+## Coverage and mutation (2026-09-21, rerun 2026-09-26)
 
 What the gates above reach, and how much a wrong core would have to differ
 before the suite noticed, are measured in [coverage](coverage.md) and
@@ -297,6 +314,9 @@ before the suite noticed, are measured in [coverage](coverage.md) and
   and survivor tests, 173; with the referee-pinned divide-by-zero flags
   (2026-09-21), 174. The two survivors, N7 and M8, are equivalent to the
   core: nothing a host can observe changes.
+  Rerun at `1f43e0b` for 0.1.0 (2026-09-26, PyPy, 14 min at 4 jobs): 174
+  again, the same two survivors; the core is 1,484 statements now and the
+  suite runs 1,464 of them.
 
 ## The tier rule
 

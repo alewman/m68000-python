@@ -135,6 +135,10 @@ the same implementation are one confirmation.
   scenario tests. The **E-clock wait of an autovector acknowledge** (5 to
   14 clocks by phase) is MAME's rule alone.
 - **RESET and STOP as instructions**: the gate (MAME) and the manual.
+- **A fault during the reset sequence halts** (an odd initial PC, BERR on a
+  vector): the manual alone (UM 5.4.4 names the reset exception among the
+  sequences whose fault is a double bus fault). No corpus has a reset-pin
+  case.
 - **ADDQ.L and SUBQ.L #,An take 8 clocks**: the manual and the gate say
   8, CLK says 6. WinUAE agrees with 8, but a 2-clock difference is inside
   its tolerance.
@@ -214,9 +218,9 @@ Coverage and mutation testing measure the evidence, not the core:
 
 - **Coverage.** The suite runs all 45,815 defined words and every
   behavioural path it declares (a 68000 never writes to program space, so
-  that path is unreachable). It reaches 1,442 of 1,466 core statements;
-  the other 24 are import-time code, defensive asserts and 4 dead lines
-  ([coverage](coverage.md)).
+  that path is unreachable). It reaches 1,464 of 1,484 core statements;
+  the other 20 are import-time code and defensive asserts, and no line is
+  dead ([coverage](coverage.md)).
 - **Mutation testing.** 176 seeded semantic mutants were run. Every
   non-equivalent mutant is killed, including D10 (the DIVS-by-zero flags),
   which the WinUAE run pinned. The two survivors, N7 and M8, are provably

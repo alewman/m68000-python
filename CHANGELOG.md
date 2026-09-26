@@ -32,6 +32,10 @@ what no available evidence settles.
 - **`reset_devices` is a constructor keyword.** The RESET instruction's
   pulse used to reach a `reset_devices` attribute found by `getattr`.
   Migration: `M68000CPU(..., reset_devices=callback)`.
+- **`set_pc` refuses an odd address and `CPUState` an odd `pc`** with a
+  `ValueError`: an instruction never lives at an odd address, and a jump to
+  one is an address error, not a start. Migration: none for a host that
+  starts programs at even addresses, which is every host.
 
 ### Added
 
@@ -81,8 +85,14 @@ what no available evidence settles.
 
 ### Fixed
 
-Each as a failing test first, then the fix, in the verification rounds
-before this release:
+Each as a failing test first, then the fix:
+
+- An address error during the reset sequence (an odd initial PC) let the
+  core's internal exception escape from `reset()`; it is a double bus fault
+  and the processor halts (UM 5.4.4). Found by the polish round's coverage
+  check of the refills, 2026-09-25.
+
+In the verification rounds before this release:
 
 - A traced illegal, line A/F or privileged instruction was followed by a
   trace exception; UM 6.3.8, MAME's microcode and WinUAE say an

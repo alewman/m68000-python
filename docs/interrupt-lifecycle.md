@@ -13,9 +13,12 @@ the MAME lockstep's 5,579 interrupts, and scenario tests).
 raised to 7, SSP fetched from address 0 and PC from address 4, both in
 supervisor program space, the queue refilled, nothing pushed. It returns 42
 clocks (UM Table 8-14 prints 40(6/0); the difference is open, see
-[claims](claims.md)). The host calls it when its RESET pin would be
-released; it may call `set_pc(address)` instead to start a program it loaded
-itself, which refills the queue without a reset and counts no clocks.
+[claims](claims.md)). A fault while it fetches the vectors or the first
+instruction (an odd initial PC, BERR on a vector) halts the processor: the
+double bus fault of UM 5.4.4. The host calls `reset()` when its RESET pin
+would be released; it may call `set_pc(address)` instead to start a program
+it loaded itself, which refills the queue without a reset and counts no
+clocks, and refuses an odd address (an instruction never lives at one).
 
 The **RESET instruction** does not reset the processor. It pulses the RESET
 line for 124 clocks (132 for the instruction); a host that wants to reset

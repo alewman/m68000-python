@@ -177,17 +177,19 @@ test, not taken from the core.
 | --- | ---: |
 | The gate corpus alone | 1,291 of 1,466 |
 | The whole suite at e3629c1 | 1,401 of 1,461 |
-| The whole suite now | **1,442 of 1,466** |
+| The whole suite at f6a61db (2026-09-21) | 1,442 of 1,466 |
+| The whole suite at 1f43e0b (2026-09-25) | **1,464 of 1,484** |
 
-(The core grew by 5 statements with the trace fix.)
-
-The 24 core statements the suite does not run: 17 run at import, before the
-tracer is installed (the decode table's construction, `_kind`, `_test`); 3
-are defensive `AssertionError`s the decoder makes unreachable; and 4 are
-**dead code**: `_push_word` in `_core.py`, which nothing calls, and the
-long branch of `_write`, which no caller reaches (every long write goes
-through `_write_long` or `_write_long_low_first` directly); both were
-removed on 2026-09-21 (7e8237f). The tooling modules (debug,
+The 20 core statements the suite does not run at 1f43e0b: 17 run at import,
+before the tracer is installed (the decode table's construction, `_kind`,
+`_test`), and 3 are defensive `AssertionError`s the decoder makes
+unreachable. There is no dead line: the 4 found on 2026-09-21 (`_push_word`
+and the long branch of `_write`) were removed (7e8237f), and the polish
+round's coverage check found the odd-address checks rung C had copied into
+the three refills unreachable, removed them, and put the invariant where it
+belongs (`set_pc` and `CPUState` refuse an odd address); the same check
+found the refills' bus-error branches untested and gave them tests. The
+tooling modules (debug,
 console, disasm, trace, `__main__`) are exercised by their own test files
 (tests/test_public_api.py, test_debug_session.py, test_trace_comparison.py,
 test_command_debugger.py, test_disasm.py, test_main.py)
