@@ -14,7 +14,13 @@ sources and the tier of every oracle it leans on.
 | [referees.md](referees.md) | WinUAE's CPU-tester core (T2 in its checked scope) and Musashi (T3), built from pinned sources and run one instruction at a time: lineages, calibration against the gate, what each can judge, the open questions put to them, the 680x0 table re-derived, a bus-error sweep |
 | [mutation.md](mutation.md) | Mutation testing of the suite: 176 seeded mutants, the score per area at three points, every survivor and what would settle it |
 | [mame-oracle.md](mame-oracle.md) | Producing 68000 instruction traces from MAME 0.285 headlessly: command line, Lua script, register names, verified output |
-| [handoff-brief.md](handoff-brief.md) | Context, task, milestones with acceptance tests in oracle-tier order, constraints, size estimate, what done looks like |
+
+Records, not contracts, kept under `history/` for provenance: the
+[handoff brief](history/handoff-brief.md) the core was built from (its
+size estimate and milestones are what was planned, not what is), and the
+[worklog](history/worklog.md) of what was run, when, with what result, and
+what was decided. The current state of every question they raise is in
+[claims.md](claims.md).
 
 Sources used throughout: the Motorola *M68000 Family Programmer's Reference
 Manual* (PRM) and *M68000 8-/16-/32-Bit Microprocessors User's Manual* (UM),

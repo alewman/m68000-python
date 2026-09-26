@@ -124,7 +124,10 @@ reaches the 68000's bus through the 315-5195 mapper (register 5 transfers;
 the reader drops those accesses), drives the 68000's RESET once during boot
 (partway through an instruction, which an instruction-level core cannot
 reproduce, so the lockstep takes D0-D7/A0-A6/USP from MAME's next line
-after that one reset), and raises IRQ4. On the Genesis the Z80 reaches the
+after that one reset; PC, SR and SSP come from the core's own reset: one
+resynchronisation of fifteen registers in 24,595,631 instructions, accepted
+on 2026-09-25 as a limitation of the comparison, not a claim about the
+core), and raises IRQ4. On the Genesis the Z80 reaches the
 68000's bus through its bank window (dropped likewise), and the bus drops
 TAS's write-back. Interrupts are recognised where MAME's next line is a
 handler entered with the mask raised; the host then holds that level for
@@ -155,7 +158,7 @@ case falls outside the rules (none is printed as `UNCLASSIFIED`).
 | Cases | Cause | Files | Explained by | WinUAE, run (docs/referees.md) |
 | ---: | --- | --- | --- | --- |
 | 178,087 | An address error costs 8 clocks more here: the aborted bus cycle (4) and 4 more before the two internal steps | 62 files | **T2**: WinUAE charges the aborted access 4 clocks (`exception3_read_access`, `exception3_write_access`) and 8 more before the frame (`Exception_ce000`, `start = 8` for a 68000 address error), 12 in all, as MAME's microcode does; CLK charges 4. `newcpu.cpp` at WinUAE `1977af5`. | **T2 by running**: clocks = core in all 178,083 judged (8 clocks: decisive). |
-| 123,862 | The PC stacked by an address error | 62 files | **Partly open.** For a jump to an odd address WinUAE (T2) stacks the instruction's address + 2 with I/N clear (`i_JMP`: `incpc("2")`, `exception3_read_prefetch_only`), as this core and MAME do; CLK stacks the odd target with I/N set. For operand faults WinUAE computes a mode-dependent stacked PC (`check_address_error`, `exception_pc_offset`, MOVE's `pcextra`) of the same kind as MAME's microcode PC, but its values were not evaluated case by case. **DBcc** (about 1,960 of these) is a three-way disagreement: MAME stacks the instruction + 4, CLK the odd target, and WinUAE's generator reads as the target + 2 (`i_DBcc`: `incpc` to the target, then `exception3_read_prefetch`, which adds 2 on a 68000). Open question for Aubrey (docs/worklog.md). | pc = core in 118,245; **contradicted** in 5,613: MOVEM (d8,An,Xn)/(d8,PC,Xn) (1,069, WinUAE = CLK), JSR via (d16,An)/(d8,An,Xn)/(d16,PC)/(d8,PC,Xn) (2,580, neither: instruction + 2), DBcc (1,964, neither: target + 2, as read). T2 conflicts with the gate: open (docs/worklog.md). |
+| 123,862 | The PC stacked by an address error | 62 files | **Partly open.** For a jump to an odd address WinUAE (T2) stacks the instruction's address + 2 with I/N clear (`i_JMP`: `incpc("2")`, `exception3_read_prefetch_only`), as this core and MAME do; CLK stacks the odd target with I/N set. For operand faults WinUAE computes a mode-dependent stacked PC (`check_address_error`, `exception_pc_offset`, MOVE's `pcextra`) of the same kind as MAME's microcode PC, but its values were not evaluated case by case. **DBcc** (about 1,960 of these) is a three-way disagreement: MAME stacks the instruction + 4, CLK the odd target, and WinUAE's generator reads as the target + 2 (`i_DBcc`: `incpc` to the target, then `exception3_read_prefetch`, which adds 2 on a 68000). Contested ([claims](claims.md)). | pc = core in 118,245; **contradicted** in 5,613: MOVEM (d8,An,Xn)/(d8,PC,Xn) (1,069, WinUAE = CLK), JSR via (d16,An)/(d8,An,Xn)/(d16,PC)/(d8,PC,Xn) (2,580, neither: instruction + 2), DBcc (1,964, neither: target + 2, as read). T2 conflicts with the gate: **contested**, the core stays on the gate ([claims](claims.md)). |
 | 17,119 | Whether an address register had moved when the fault came | 22 files | **T2**: WinUAE's rules are this core's: `-(An)` is decremented before the check on a 68000, a MOVE `(An)+` destination is not incremented, a long MOVE to `-(An)` leaves An, ADDX/SUBX's special case (`check_address_error`, `move_68000_address_error`). | An/Dn = core in 16,746 (**T2 by running**); **contradicted** for CMPM.L (An)+,(An)+ (373, neither). Not in this row: 14,148 word (An)+ faults where core and CLK agree An moved and WinUAE says it did not (open). |
 | 8,180 | Accesses before the fault differ (MOVE with a PC-relative source; RTE, RTR) | MOVE.w, MOVE.l, RTE, RTR | the causes in the next rows, seen before a fault | No pre-exception field differs but MOVE to -(An)'s clocks (18: +2, inside ±2). |
 | 8,049 | RTE and RTR read the stack in another order (CLK reads the PC's high word before SR) | RTE, RTR | **T2**: WinUAE reads SR, then PC high, then PC low (`i_RTE`, 68000 branch: "Read SR (SP+=6), Read PC high, Read PC low"; `i_RTR` likewise). | Data-read order = core in all 8,048 judged, but bus order is not what cputest checks: **T3 by running** (the T2 label was too strong). |
@@ -186,8 +189,9 @@ undecided by T2.  Running contradicted the reading in three places (the
 stacked PC of MOVEM and JSR through indexed and displacement modes, and
 CMPM.L's An) and found a disagreement the table could not show, because
 the core and CLK agree on it (a word (An)+ that faults: WinUAE leaves An).
-Each is an open question for Aubrey in docs/worklog.md; the core follows
-the gate.
+Each is **contested** in [claims](claims.md) (decided 2026-09-21: the core
+follows the gate until real-hardware evidence decides); the decision record
+is [history/worklog.md](history/worklog.md).
 
 ## Rung 6: interrupts and STOP
 
@@ -231,10 +235,10 @@ before the suite noticed, are measured in [coverage](coverage.md) and
   traced illegal, line A/F or privilege-violating instruction was followed
   by a trace exception, contrary to UM 6.3.8 (MAME's microcode and WinUAE
   agree with the manual). No corpus could see it.
-- Of 176 seeded mutants the suite at e3629c1 killed 158; with this
-  session's tests, 173. N7 and M8 are equivalent to the core; D10, the flags
-  after DIVS by zero, is undefined in PRM, absent from both corpora, and
-  open.
+- Of 176 seeded mutants the suite at e3629c1 killed 158; with the coverage
+  and survivor tests, 173; with the referee-pinned divide-by-zero flags
+  (2026-09-21), 174. The two survivors, N7 and M8, are equivalent to the
+  core: nothing a host can observe changes.
 
 ## The tier rule
 
@@ -281,9 +285,10 @@ and CCR against a table, and reports deviations. README: "Real hardware
 naturally passes all tests; this has been verified on: Model 1 Sega Genesis,
 Model 3 VA2 Sega Genesis. For reference, the original BCD data I used to
 reverse-engineer the operations was obtained from a Model 1." The
-expected tables are generated by the source; a Python port of the table
-generator, with the rule stated in [undocumented-behavior](undocumented-behavior.md),
-is the planned T1 gate for the three instructions. Limits: only BCD; only
+expected tables are generated by the source; the rule, stated in
+[undocumented-behavior](undocumented-behavior.md) and written out in
+`_bcd.py`, is the T1 gate for the three instructions (`tests/test_bcd.py`;
+the certification record above). Limits: only BCD; only
 the register forms are timed by the frame counter, not cycle-verified.
 
 ## T1 (evidence): transistorfet's hardware runner
@@ -390,8 +395,8 @@ transactions [["r", 4, fc 2, 0xDE9EC, ".w", 0x326B, uds 1, lds 1]]
 Two conventions to get right: `pc` is MAME's `m_au`, "next prefetch
 address", **the instruction's address + 4**, so the opcode word is at
 `pc - 4` and equals `prefetch[0]`; and `ram` holds 16-bit words at even
-addresses (the `decode.py` output splits them into bytes, this project's
-runner will not). The data bus for a byte access carries the byte in the
+addresses (the `decode.py` output splits them into bytes; `tests/corpus.py`
+does not). The data bus for a byte access carries the byte in the
 half the strobes select (`0xAB00` for an upper-byte read), as on the pins.
 
 ## T3: SingleStepTests/680x0 (Tom Harte)
@@ -441,8 +446,8 @@ therefore need two small adapters, not one.
 the microcoded core (Olivier Galibert, `m68000gen.py` generates the handlers
 from the microcode and nanocode tables it embeds; `m68000musashi.cpp` keeps
 the old core as an alternative device). A whole-game trace from a System
-16 board is the long-sequence check this project will use in the role
-ZEXALL plays for z80-python: not a hardware claim, but millions of
+16 board is the long-sequence check this project uses in the role ZEXALL
+plays for z80-python (rung 4 above): not a hardware claim, but millions of
 instructions of real code with real interrupt timing. The recipe, a
 verified run, and the register names are in [mame-oracle](mame-oracle.md).
 
@@ -456,7 +461,7 @@ typographical errors in the timing tables. Not an oracle tier.
 
 ## Certification ladder
 
-In the order the [handoff brief](handoff-brief.md) prescribes, with status:
+In the order the [handoff brief](history/handoff-brief.md) prescribed, with status:
 
 1. SingleStepTests/m68000, rung-1 files (NOP, MOVEQ, Bcc, RTS, MOVE): pass.
 2. BCD tables (T1): pass.
@@ -467,7 +472,8 @@ In the order the [handoff brief](handoff-brief.md) prescribes, with status:
    every disagreement named; stacked PCs of operand faults partly open.
 6. Interrupts and STOP: 12 scenarios, consistent with the manual and MAME.
    (Coverage and mutation, 2026-09-21: every defined first word executed by
-   the suite; 173 of 176 mutants killed; see [coverage](coverage.md).)
+   the suite; 174 of 176 mutants killed, the two survivors equivalent; see
+   [coverage](coverage.md) and [mutation](mutation.md).)
 7. Referees (2026-09-21, [referees](referees.md)): WinUAE's CPU-tester core
    (T2 in scope) and Musashi (T3) built and run; calibrated against the gate
    (97.9% and 98.2% of judged cases, every residual named); the open

@@ -9,7 +9,7 @@ from m68000_python._dispatch import COMPILED, NAMES, decode
 def test_defined_word_count_matches_the_opcode_map() -> None:
     # 45,815 defined first words: SingleStepTests/680x0's map/68000.official.json
     # has 19,721 None of 65,536 (docs/validation.md); MAME 0.285's m68000.lst
-    # agrees word for word (checked when the table was written, docs/worklog.md).
+    # agrees word for word (checked when the table was written, docs/history/worklog.md).
     defined = sum(name not in ("illegal", "line_a", "line_f") for name in NAMES)
     assert defined == 45815
     counts = Counter(NAMES)

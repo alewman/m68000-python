@@ -192,9 +192,8 @@ every test that fails for each mutant.
   `clocks == set(range(48, 58)) or len(clocks) > 1`. The range is off by one
   (the core, and MAME per the lockstep, give 49 to 58), so the first half is
   false and the test passes only because the clocks vary at all -- which is
-  why CY10 survived it. The test was left as it is (the rules forbid
-  changing an existing test); a precise one was added beside it, and the
-  question is in docs/worklog.md.
+  why CY10 survived it. A precise one was added beside it, and the old one
+  was corrected to the exact set on 2026-09-21 (7e8237f).
 - **CY14 was killed, and it matters.** CY14 gives `ADDQ.W #,An` the 4 clocks
   UM Table 8-5 prints; the gate killed it (118 cases say 8). The manual and
   the microcode-derived corpus disagree here, and the core follows the

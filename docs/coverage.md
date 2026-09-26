@@ -186,8 +186,8 @@ tracer is installed (the decode table's construction, `_kind`, `_test`); 3
 are defensive `AssertionError`s the decoder makes unreachable; and 4 are
 **dead code**: `_push_word` in `_core.py`, which nothing calls, and the
 long branch of `_write`, which no caller reaches (every long write goes
-through `_write_long` or `_write_long_low_first` directly). Removing them
-is a question for Aubrey (docs/worklog.md). The tooling modules (debug,
+through `_write_long` or `_write_long_low_first` directly); both were
+removed on 2026-09-21 (7e8237f). The tooling modules (debug,
 console, disasm, trace, `__main__`) are exercised by tests/test_tooling.py
 and are outside this report's scope.
 
@@ -237,8 +237,8 @@ into a test of what the core happens to do.
    the System 16B lockstep at all ten phases; the manual gives only the
    principle. *Settle:* a hardware timing capture of an autovectored
    interrupt at known E-clock phases.
-8. **Carried over from the build session** (docs/worklog.md, open
-   questions 1 and 5): the stacked PC of DBcc with an odd target (MAME, CLK
+8. **Carried over from the build session** ([history/worklog.md](history/worklog.md),
+   open questions 1 and 5): the stacked PC of DBcc with an odd target (MAME, CLK
    and a WinUAE reading give three different answers), and the stacked PC
    of operand address errors against WinUAE case by case.
 
@@ -279,8 +279,9 @@ built and run on each gap:
   is not executed is not traced; MAME's microcode and WinUAE agree. Test
   4206431 (failing), fix 8760315.
 - **A weak existing test**: tests/test_interrupts.py's E-clock phase test
-  can only fail if every phase gives the same clock count (docs/mutation.md,
-  docs/worklog.md). Left as it is; a precise test was added beside it.
+  could only fail if every phase gave the same clock count
+  (docs/mutation.md). A precise test was added beside it, and the old one
+  was corrected to the exact set on 2026-09-21 (7e8237f).
 - **Dead code**: `_push_word`, and `_write`'s long branch.
 - **A mistake of this session's own, corrected**: the first version of the
   path probe ran 680x0 cases on the m68000 corpus's word-addressed host and

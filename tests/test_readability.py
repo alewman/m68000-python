@@ -2,8 +2,8 @@
 
 Following m6800-python's and z80-python's tests/test_readability.py: every
 opcode handler must be findable by the Motorola name a 68000 programmer would
-grep for, and must live in the module the brief assigns that instruction to
-(docs/handoff-brief.md).  Checked from the source with :mod:`ast`:
+grep for, and must live in the module that owns that instruction (``OWNERS``
+below).  Checked from the source with :mod:`ast`:
 
 1. Every ``_op_*`` method's docstring starts with one Motorola instruction
    name as PRM Sections 4 and 6 title it (``ADD``, ``ANDI to CCR``, ``MOVE

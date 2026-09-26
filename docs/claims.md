@@ -13,7 +13,8 @@ This page is the contract. The evidence behind each row lives in
 [validation](validation.md), [referees](referees.md),
 [coverage](coverage.md), [mutation](mutation.md) and
 [undocumented-behavior](undocumented-behavior.md); what was decided, and
-when, is in the [worklog](worklog.md).
+when, is in the [worklog](history/worklog.md), a record of how the core was
+built and verified.
 
 ## The strands of evidence
 

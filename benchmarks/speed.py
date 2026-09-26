@@ -1,4 +1,4 @@
-"""Instructions per second on a flat 16 MB RAM host, for the worklog and README.
+"""Instructions per second on a flat 16 MB RAM host, for docs/validation.md and the README.
 
     python benchmarks/speed.py [--seconds 5]
 

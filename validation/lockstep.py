@@ -14,7 +14,7 @@ interrupt is recognised where MAME's next line is a handler entered with the
 mask raised; the host then asserts that level for one step, as the board's
 interrupt line does, and the core must arrive at the same place.
 
-The host is here, not in the core (docs/handoff-brief.md).  Nothing it reads
+The host is here, not in the core (README, "The embedding contract").  Nothing it reads
 or writes is committed: ROMs stay where they are, traces under
 ``validation/mame_runs/`` (ignored).
 """

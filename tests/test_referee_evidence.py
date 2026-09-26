@@ -15,7 +15,7 @@ reporting the behaviour verified.
 The expected values are the referee's, written out here as rules; none is
 taken from this core.  Where the referee and the gate corpus disagree, or
 where the tester's scope does not reach, nothing is pinned here: those
-questions are in docs/referees.md and docs/worklog.md.
+questions are in docs/referees.md and docs/claims.md.
 """
 
 from __future__ import annotations
@@ -234,7 +234,7 @@ def test_trapv_with_an_odd_vector_stacks_trapv_as_the_ir():
     TRAPV, CHK, TRAP, DIVU and DIVS with odd exception vectors, and the 4.4.0
     changelog: "68000/010 odd exception vector generated address error stack
     frame is now correct.  Tester support added."  I/N is not asserted: see
-    docs/worklog.md.
+    docs/history/worklog.md.
     """
     cpu, bus = with_vectors(v3=0x3000, v7=0x5001)
     bus.load(0x3000, [NOP] * 4)

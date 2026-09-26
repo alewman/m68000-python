@@ -1,5 +1,11 @@
 # Handoff: build `m68000-python`, a pure-Python 68000 core in the shape of z80-python
 
+> **A record, not a contract.** This is the brief the core was built from
+> on 2026-09-18/19, kept unchanged for provenance. Its size estimate
+> (18,000-25,000 lines; the core is about 4,600) and its milestones are what
+> was planned; what the core claims today is [../claims.md](../claims.md).
+
+
 ## Context you are inheriting
 
 `z80-python` (`/data/emu/z80-python`), `6502-python` (`/data/emu/6502-python`),

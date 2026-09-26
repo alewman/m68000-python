@@ -163,7 +163,7 @@ class CoreMixin:
         self.write_byte, self.write_word = write_byte, write_word
         tas_write = self.tas_write
         if self.function_codes:
-            # Only a host that asks pays for function codes (docs/handoff-brief.md).
+            # Only a host that asks pays for function codes (README, "The embedding contract").
             self._read_program = lambda address: read_word(address, fc=self._fc(True))
             self._read_data_word = lambda address: read_word(address, fc=self._fc(False))
             self._read_data_byte = lambda address: read_byte(address, fc=self._fc(False))
@@ -507,5 +507,6 @@ class CoreMixin:
             # A group 0 fault while processing a group 0 exception: the double
             # bus fault halts the processor until reset (UM 5.4.4, 6.3.9.1).
             # MAME 0.285 takes another address error instead; the corpus has
-            # no such case, and the manual is followed (docs/worklog.md).
+            # no such case, and the manual is followed (docs/claims.md,
+            # "Undecidable here").
             self.halted = True

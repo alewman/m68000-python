@@ -1,4 +1,4 @@
-"""Put each open question of docs/worklog.md and docs/coverage.md to the referees.
+"""Put each open question of docs/history/worklog.md and docs/coverage.md to the referees.
 
     python validation/referees/questions.py            # every question
     python validation/referees/questions.py dbcc chk   # some of them

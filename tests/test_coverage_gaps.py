@@ -708,7 +708,7 @@ def test_an_address_error_inside_exception_processing_sets_i_slash_n_for_group_1
     WinUAE's CPU-tester core (T2 by running, inside its ODDEXC scope) and MAME
     0.285's microcode (T3, read: TRAP, TRAPV, CHK and the divide-by-zero trap
     stack and refill without SSW_N) both clear I/N for group 2 and set it for
-    group 1 (docs/worklog.md question 17, decided 2026-09-21).  This test
+    group 1 (docs/history/worklog.md question 17, decided 2026-09-21).  This test
     asserted I/N set for TRAP until then, from a reading of the manual alone.
     The stacked PC and IR are not asserted (UM 6.2.5: unpredictable).
     """

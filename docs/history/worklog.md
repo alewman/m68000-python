@@ -1,8 +1,12 @@
 # Worklog
 
-A running record of the session that builds the core: what was run, with
-counts and pins, what did not pass, and what is waiting for Aubrey. Newest
-entries at the bottom of each section.
+> **A record, not a contract.** The running log of the sessions that built
+> and verified the core (2026-09-18 to 2026-09-21): what was run, with
+> counts and pins, what did not pass, and what was asked and decided. The
+> current status of every question below is [../claims.md](../claims.md);
+> nothing here is maintained after 2026-09-25.
+
+Newest entries at the bottom of each section.
 
 ## How I read the brief, and the plan (2026-09-18)
 
@@ -47,7 +51,13 @@ does the logging; function codes are passed only when the host asks).
 ## Open questions
 
 For Aubrey; in each case the conservative choice was taken and the work
-went on.
+went on. Status as of 2026-09-25: 1 and 12-16 **contested** (claims.md);
+2 and 18 **undecidable here**; 3 and 11 **undecidable here** (the test
+asserts the manual's halt); 4 and 10 **settled** at T2 by running; 5
+re-derived by running (referees.md); 6 **accepted** 2026-09-25 as a
+limitation of the lockstep comparison (validation.md, rung 4); 7 done
+(pushed 2026-09-21); 8, 9, 17 decided 2026-09-21 (below); 19 **outside the
+contract**; 20 corrected.
 
 1. **DBcc with an odd branch target: which PC is stacked?** MAME's
    microcode (and so the pinned corpus, which the core passes) stacks the
@@ -74,7 +84,10 @@ went on.
    instruction-level core cannot reproduce; after that reset the lockstep
    copies D0-D7/A0-A6/USP from MAME's next line (PC, SR and SSP come from
    the core's own reset). Acceptable?
+   **Accepted 2026-09-25 (Aubrey):** a limitation of the comparison, not a
+   claim about the core; recorded in validation.md, rung 4.
 7. **Nothing pushed, no GitHub repository created**, per the brief.
+   **Done 2026-09-21:** pushed to alewman/m68000-python, CI green.
 
 Added 2026-09-21 (coverage and mutation session):
 

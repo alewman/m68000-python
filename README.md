@@ -24,16 +24,15 @@ register before every instruction of **24.6 million instructions of System
 disagreement is sorted into a named cause, most explained by WinUAE's
 hardware-corrected rules. Interrupts and STOP are covered by scenario tests
 consistent with the manual and with MAME. The record, with every pin, is
-[docs/validation.md](docs/validation.md); what was run and what is open is
-[docs/worklog.md](docs/worklog.md).
+[docs/validation.md](docs/validation.md); what is contested or open, and
+what would settle it, is [docs/claims.md](docs/claims.md).
 
 What that evidence reaches is mapped in [docs/coverage.md](docs/coverage.md):
 the gate executes 38,019 of the 45,815 defined first words, and the suite now
 runs all of them, the rest checked by register-renaming relations the manual
 implies and by manual-derived tests. [docs/mutation.md](docs/mutation.md)
-measures the suite: of 176 seeded mutants it kills 173; two of the three
-survivors are equivalent to the core, and one (the flags after DIVS by zero,
-undefined in the manual) is open.
+measures the suite: of 176 seeded mutants it kills 174, and the two
+survivors are provably equivalent to the core.
 
 ## Scope
 
@@ -49,29 +48,6 @@ mode, the 29-word bus-error frame, `MOVEC`/`MOVES`, privileged `MOVE from
 SR`), the 68EC020/68020 and later (32-bit bus, full extension words,
 memory-indirect addressing, bit fields, `DIVS.L`, caches). The 68008's 8-bit
 bus is a host matter but its timing is not modeled.
-
-## What a pure-Python 68000 is
-
-Larger than the two sibling cores by a clear margin, and the documents say
-so rather than hide it:
-
-- a 16-bit opcode space (65,536 first words, 45,815 defined) decoded by
-  family bits and then by size and effective-address fields, rather than
-  256 opcodes and four prefixes;
-- twelve effective-address modes with extension words, shared by about 80
-  instruction families;
-- supervisor and user modes with separate stack pointers, and a 256-entry
-  vector table;
-- three groups of exceptions with two stack-frame shapes, including
-  address errors that abort an instruction mid-way and push a seven-word
-  frame whose contents the manual calls unpredictable;
-- a two-word prefetch queue that determines the bus-transaction pattern the
-  test corpora record and that self-modifying code can observe;
-- seven interrupt levels with an acknowledge cycle that may return a vector,
-  an autovector, or a spurious-interrupt indication.
-
-The [handoff brief](docs/handoff-brief.md) estimates the core at two to
-three times z80-python's size and orders the work by oracle tier.
 
 ## The embedding contract
 
@@ -104,11 +80,11 @@ where in the step the access falls (it ends at that clock), which a board
 needs to stall the CPU at the right point; the core models no wait states,
 so the host adds its own stall clocks to the step's total.
 
-Speed, on the loop in `benchmarks/speed.py` (a shared, loaded machine):
-about 0.6-0.7 million instructions per second on CPython 3.14 and about 20
-million on PyPy 7.3.23 (the Mega Drive's 68000 runs about 1 million a
-second); on real game code under the lockstep the core is far faster than
-the trace parsing around it.
+Speed, on the loop in `benchmarks/speed.py` (a shared, loaded machine,
+2026-09-25): about 1.25 million instructions per second on CPython 3.14.4
+and about 20 million on PyPy 7.3.20 (the Mega Drive's 68000 runs about 1
+million a second); on real game code under the lockstep the core is far
+faster than the trace parsing around it.
 
 ## Oracles
 
@@ -154,8 +130,7 @@ docs/validation.md           the certification record; oracles, tiers, pins
 docs/coverage.md             what the evidence reaches, and the open gaps
 docs/mutation.md             what the suite would notice: mutants and survivors
 docs/mame-oracle.md          the MAME trace recipe
-docs/worklog.md              what was run, when, with what result
-docs/handoff-brief.md        the brief for the session that builds the core
+docs/history/                the handoff brief and the worklog: records, not contracts
 tests/68000_test_vectors/    fetched corpora, ignored by git
 ```
 
