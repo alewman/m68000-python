@@ -58,9 +58,11 @@ VECTOR_TRAP_BASE = 32
 AUTOVECTOR = -1
 SPURIOUS = -2
 
-#: Operand sizes in bytes (1, 2, 4) index their masks and sign bits.
-MASK = {1: 0xFF, 2: 0xFFFF, 4: 0xFFFFFFFF}
-MSB = {1: 0x80, 2: 0x8000, 4: 0x80000000}
+#: Operand sizes in bytes (1, 2, 4) index their masks and sign bits: tuples,
+#: because a tuple index is cheaper than a dict lookup on every instruction
+#: (rung A of the speed ladder, docs/validation.md "Speed").
+MASK = (0, 0xFF, 0xFFFF, 0, 0xFFFFFFFF)
+MSB = (0, 0x80, 0x8000, 0, 0x80000000)
 
 ReadFunction = Callable[..., int]
 WriteFunction = Callable[..., None]
