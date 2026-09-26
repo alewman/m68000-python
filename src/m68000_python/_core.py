@@ -345,11 +345,22 @@ class CoreMixin:
         """
         self._fault_pc = self._pc
 
+    # The three refills below write _read_program_word's body out instead of
+    # calling it: they run once or more per instruction, and a Python frame
+    # is the cost that dominates this core (rung C, docs/validation.md "Speed").
+
     def _extension(self) -> int:
         """Take the extension word waiting in IRC and refill IRC from _pc."""
         value = self.irc
-        self.irc = self._read_program_word(self._pc)
-        self._pc = (self._pc + 2) & 0xFFFFFFFF
+        address = self._pc
+        if address & 1:
+            raise self._fault(VECTOR_ADDRESS_ERROR, address, False, True)
+        self._cycles += 4
+        try:
+            self.irc = self._read_program(address & MASK24)
+        except BusError:
+            raise self._fault(VECTOR_BUS_ERROR, address, False, True) from None
+        self._pc = (address + 2) & 0xFFFFFFFF
         return value
 
     def _extension_long(self) -> int:
@@ -362,13 +373,19 @@ class CoreMixin:
         The opcode of the next instruction is then in IR and its first
         extension word in IRC (UM "Prefetch"; corpus ``prefetch`` pair).
         """
-        self._fault_pc = self._pc
+        address = self._fault_pc = self._pc
         # IR takes IRC, and the decoder (IRD) takes IR, before the read: an
         # address error on this read already stacks the next opcode (every
         # faulting closing prefetch of the corpus; T3).
         self.ir = self._opcode = self.irc
-        self.irc = self._read_program_word(self._pc)
-        self._pc = (self._pc + 2) & 0xFFFFFFFF
+        if address & 1:
+            raise self._fault(VECTOR_ADDRESS_ERROR, address, False, True)
+        self._cycles += 4
+        try:
+            self.irc = self._read_program(address & MASK24)
+        except BusError:
+            raise self._fault(VECTOR_BUS_ERROR, address, False, True) from None
+        self._pc = (address + 2) & 0xFFFFFFFF
 
     def _prefetch_before_write(self) -> None:
         """The closing prefetch of an instruction that still has a write to do.
@@ -379,10 +396,16 @@ class CoreMixin:
         address error on
         a write before that point stacks the old opcode.
         """
-        self._fault_pc = self._pc
+        address = self._fault_pc = self._pc
         self.ir = self.irc
-        self.irc = self._read_program_word(self._pc)
-        self._pc = (self._pc + 2) & 0xFFFFFFFF
+        if address & 1:
+            raise self._fault(VECTOR_ADDRESS_ERROR, address, False, True)
+        self._cycles += 4
+        try:
+            self.irc = self._read_program(address & MASK24)
+        except BusError:
+            raise self._fault(VECTOR_BUS_ERROR, address, False, True) from None
+        self._pc = (address + 2) & 0xFFFFFFFF
 
     def _jump(self, target: int) -> None:
         """Refill the queue from ``target``: two program reads (UM Table 8-9).
