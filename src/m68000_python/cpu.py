@@ -220,7 +220,9 @@ class M68000CPU(
     def reset(self) -> int:
         """The reset exception (UM 6.3.1): S set, T clear, mask 7, SSP and PC from 0 and 4.
 
-        Nothing is pushed.  Returns the clocks spent, 42: 16 internal, the
+        Nothing is pushed.  A fault while fetching the vectors or the first
+        instruction (an odd initial PC) halts the processor as a double bus
+        fault (UM 5.4.4).  Returns the clocks spent, 42: 16 internal, the
         four vector reads, and the two-read refill of the queue with its 2
         idle clocks, as every other exception entry refills it.  UM Table
         8-14 prints 40(6/0) for reset; no corpus has a reset-pin case and
@@ -234,10 +236,15 @@ class M68000CPU(
         self._nmi_edge = False
         self._set_sr((self.SR | S | IPL_MASK) & ~T)
         self._cycles += 16
-        self.R[15] = (self._read_program_word(0) << 16) | self._read_program_word(2)
-        pc = (self._read_program_word(4) << 16) | self._read_program_word(6)
-        self._fault_pc = pc
-        self._jump_idle(pc)
+        try:
+            self.R[15] = (self._read_program_word(0) << 16) | self._read_program_word(2)
+            pc = (self._read_program_word(4) << 16) | self._read_program_word(6)
+            self._fault_pc = pc
+            self._jump_idle(pc)
+        except GroupZero:
+            # An address or bus error during the reset sequence (an odd initial
+            # PC, BERR on a vector) is a double bus fault: halt (UM 5.4.4).
+            self.halted = True
         self.clock += self._cycles
         return self._cycles
 
