@@ -139,7 +139,8 @@ class EAMixin:
         PC-relative operands are read in program space (FC 2/6, UM Table 3-2).
         """
         if size == 4 and kind == POSTINC:
-            # A long (An)+ steps An between its two reads (T3): a fault on
+            # A long (An)+ steps An between its two reads (SST ADD.l, MOVE.l and
+            # every long (An)+ read; T3): a fault on
             # the first leaves An alone.
             R = self.R
             address = R[8 + register]
@@ -147,7 +148,8 @@ class EAMixin:
             R[8 + register] = (address + 4) & 0xFFFFFFFF
             return address, (high << 16) | self._read_word(address + 2)
         if size == 4 and kind == PREDEC:
-            # A long -(An) does not bring PC up to date, unlike a word (T3).
+            # A long -(An) does not bring PC up to date, unlike a word (SST
+            # ADD.l, MOVE.l and every long -(An) read; T3).
             self._cycles += 2
             address = (self.R[8 + register] - 4) & 0xFFFFFFFF
             self.R[8 + register] = address

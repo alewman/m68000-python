@@ -61,7 +61,7 @@ class FlagsMixin:
     # flags once per word: N Z V C from the low word, then N from the high
     # word with Z kept only if the high word is zero too.  Only an address
     # error between the two can see the halfway state; the stacked SR does
-    # (corpus, T3).  _flags_logic is the two applied in order.
+    # (SST MOVE.l, T3).  _flags_logic is the two applied in order.
 
     def _flags_low_word(self, value: int) -> None:
         """N Z from the low word; V C cleared (the first half of a long's flags)."""

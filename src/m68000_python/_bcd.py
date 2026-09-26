@@ -10,7 +10,7 @@ N is bit 7 of the corrected byte, and V is set when the correction flipped
 bit 7 -- from 0 to 1 for an add, from 1 to 0 for a subtract.  C and X are set
 by a carry (borrow) out of either the binary step or the correction.
 
-The three instructions' bus sequences are the microcode's (corpus, T3): the
+The three instructions' bus sequences are the microcode's (SST ABCD, SBCD, NBCD; T3): the
 register forms prefetch and then spend two internal clocks; the memory forms
 read, prefetch, then write.
 """
@@ -98,15 +98,28 @@ class BCDMixin:
         self._write_byte(destination_address, result)
 
     def _op_abcd(self, opcode: int) -> None:
-        """ABCD -- destination <- destination + source + X, decimal (PRM 4-3; UM Table 8-11)."""
+        """ABCD -- destination <- destination + source + X, decimal (PRM 4-3; UM Table 8-11).
+
+        N and V, undefined in PRM: flamewing's hardware-captured tables (T1,
+        tests/test_bcd.py).  Bus order, the 2 idle clocks of the register form and
+        the PC an address error stacks: SST ABCD.
+        """
         self._bcd_pair(opcode, decimal_add)
 
     def _op_sbcd(self, opcode: int) -> None:
-        """SBCD -- destination <- destination - source - X, decimal (PRM 4-176; UM Table 8-11)."""
+        """SBCD -- destination <- destination - source - X, decimal (PRM 4-176; UM Table 8-11).
+
+        N and V: flamewing's tables (T1).  Bus order and the PC an address error
+        stacks: SST SBCD.
+        """
         self._bcd_pair(opcode, decimal_subtract)
 
     def _op_nbcd(self, opcode: int) -> None:
-        """NBCD -- destination <- 0 - destination - X, decimal (PRM 4-142; UM Table 8-6)."""
+        """NBCD -- destination <- 0 - destination - X, decimal (PRM 4-142; UM Table 8-6).
+
+        N and V: flamewing's tables (T1).  Bus order and the PC an address error
+        stacks: SST NBCD.
+        """
         kind = EA_KIND[opcode & 0x3F]
         register = opcode & 7
         extend = (self.SR >> 4) & 1

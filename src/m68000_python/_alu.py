@@ -43,7 +43,7 @@ def divide_unsigned_clocks(dividend: int, divisor: int) -> int:
     detected first; otherwise 15 steps each shift the dividend left, and a
     step whose shifted-out bit was 0 costs 2 more clocks, less 1 if the
     trial subtraction succeeded.  Jorge Cwik's analysis (2005, carried in
-    WinUAE, T2) states the same count; the corpus checks it (T3).
+    WinUAE, T2) states the same count; SST DIVU checks it on every case (T3).
     """
     if dividend >> 16 >= divisor:
         return 10
@@ -175,29 +175,53 @@ class ALUMixin:
         self._to_data_register(dn, size, result, kind)
 
     def _op_add(self, opcode: int) -> None:
-        """ADD -- destination <- destination + source; X N Z V C (PRM 4-4; UM Table 8-4)."""
+        """ADD -- destination <- destination + source; X N Z V C (PRM 4-4; UM Table 8-4).
+
+        SST ADD.b/.w/.l pin the bus order, the idle clocks and the PC an
+        address error stacks (their cases also cover ADDI and ADDQ).
+        """
         self._binary(opcode, self._add)
 
     def _op_sub(self, opcode: int) -> None:
-        """SUB -- destination <- destination - source; X N Z V C (PRM 4-174; UM Table 8-4)."""
+        """SUB -- destination <- destination - source; X N Z V C (PRM 4-174; UM Table 8-4).
+
+        SST SUB.b/.w/.l pin the bus order, the idle clocks and the PC an
+        address error stacks (their cases also cover SUBI and SUBQ).
+        """
         self._binary(opcode, self._sub)
 
     def _op_and(self, opcode: int) -> None:
-        """AND -- destination <- destination AND source; N Z, V C cleared (PRM 4-15)."""
+        """AND -- destination <- destination AND source; N Z, V C cleared (PRM 4-15; UM Table 8-4).
+
+        SST AND.b/.w/.l pin the bus order, the idle clocks and the PC an
+        address error stacks (their cases also cover ANDI).
+        """
         self._binary(opcode, self._and)
 
     def _op_or(self, opcode: int) -> None:
-        """OR -- destination <- destination OR source; N Z, V C cleared (PRM 4-150)."""
+        """OR -- destination <- destination OR source; N Z, V C cleared (PRM 4-150; UM Table 8-4).
+
+        SST OR.b/.w/.l pin the bus order, the idle clocks and the PC an
+        address error stacks (their cases also cover ORI).
+        """
         self._binary(opcode, self._or)
 
     def _op_eor(self, opcode: int) -> None:
-        """EOR -- <ea> <- <ea> XOR Dn; N Z, V C cleared (PRM 4-100; UM Table 8-4)."""
+        """EOR -- <ea> <- <ea> XOR Dn; N Z, V C cleared (PRM 4-100; UM Table 8-4).
+
+        SST EOR.b/.w/.l pin the bus order and the PC an address error stacks
+        (their cases also cover EORI).
+        """
         size = SIZE[(opcode >> 6) & 3]
         source = self.R[(opcode >> 9) & 7] & MASK[size]
         self._modify(EA_KIND[opcode & 0x3F], opcode & 7, size, self._eor, source)
 
     def _op_cmp(self, opcode: int) -> None:
-        """CMP -- set N Z V C from Dn - source; X unchanged (PRM 4-75; UM Table 8-4)."""
+        """CMP -- set N Z V C from Dn - source; X unchanged (PRM 4-75; UM Table 8-4).
+
+        SST CMP.b/.w/.l pin the bus order, the 2 idle clocks of a long and the PC
+        an address error stacks (their cases also cover CMPI and CMPM).
+        """
         size = SIZE[(opcode >> 6) & 3]
         source = self._ea_read(EA_KIND[opcode & 0x3F], opcode & 7, size)
         self._cmp(self.R[(opcode >> 9) & 7] & MASK[size], source, size)
@@ -224,7 +248,11 @@ class ALUMixin:
             self._cycles += 2
 
     def _op_adda(self, opcode: int) -> None:
-        """ADDA -- An <- An + source (word sign-extended); flags unchanged (PRM 4-7)."""
+        """ADDA -- An <- An + source, a word sign-extended; no flags (PRM 4-7; UM Table 8-4).
+
+        SST ADDA.w/.l pin the idle clocks (4 for a word or a register or immediate
+        long source, else 2) and the PC an address error stacks.
+        """
         source, kind = self._address_source(opcode)
         an = 8 + ((opcode >> 9) & 7)
         self._prefetch()
@@ -232,7 +260,11 @@ class ALUMixin:
         self.R[an] = (self.R[an] + source) & 0xFFFFFFFF
 
     def _op_suba(self, opcode: int) -> None:
-        """SUBA -- An <- An - source (word sign-extended); flags unchanged (PRM 4-178)."""
+        """SUBA -- An <- An - source, a word sign-extended; no flags (PRM 4-178; UM Table 8-4).
+
+        SST SUBA.w/.l pin the idle clocks (4 for a word or a register or immediate
+        long source, else 2) and the PC an address error stacks.
+        """
         source, kind = self._address_source(opcode)
         an = 8 + ((opcode >> 9) & 7)
         self._prefetch()
@@ -240,7 +272,10 @@ class ALUMixin:
         self.R[an] = (self.R[an] - source) & 0xFFFFFFFF
 
     def _op_cmpa(self, opcode: int) -> None:
-        """CMPA -- set N Z V C from An - source, a 32-bit compare (PRM 4-77)."""
+        """CMPA -- set N Z V C from An - source, a 32-bit compare (PRM 4-77; UM Table 8-4).
+
+        SST CMPA.w/.l pin the 2 idle clocks and the PC an address error stacks.
+        """
         source, _ = self._address_source(opcode)
         self._cmp(self.R[8 + ((opcode >> 9) & 7)], source, 4)
         self._prefetch()
@@ -263,27 +298,47 @@ class ALUMixin:
         self._modify(EA_KIND[opcode & 0x3F], opcode & 7, size, operation, source)
 
     def _op_addi(self, opcode: int) -> None:
-        """ADDI -- destination <- destination + #data (PRM 4-9; UM Table 8-5)."""
+        """ADDI -- destination <- destination + #data (PRM 4-9; UM Table 8-5).
+
+        The immediate's refills come before the operand and the PC is committed
+        at the last of them: SST ADD.b/.w/.l (the ADDI cases).
+        """
         self._immediate_to_ea(opcode, self._add)
 
     def _op_subi(self, opcode: int) -> None:
-        """SUBI -- destination <- destination - #data (PRM 4-180; UM Table 8-5)."""
+        """SUBI -- destination <- destination - #data (PRM 4-180; UM Table 8-5).
+
+        Refills, commit point and bus order: SST SUB.b/.w/.l (the SUBI cases).
+        """
         self._immediate_to_ea(opcode, self._sub)
 
     def _op_andi(self, opcode: int) -> None:
-        """ANDI -- destination <- destination AND #data (PRM 4-18; UM Table 8-5)."""
+        """ANDI -- destination <- destination AND #data (PRM 4-18; UM Table 8-5).
+
+        Refills, commit point and bus order: SST AND.b/.w/.l (the ANDI cases).
+        """
         self._immediate_to_ea(opcode, self._and)
 
     def _op_ori(self, opcode: int) -> None:
-        """ORI -- destination <- destination OR #data (PRM 4-153; UM Table 8-5)."""
+        """ORI -- destination <- destination OR #data (PRM 4-153; UM Table 8-5).
+
+        Refills, commit point and bus order: SST OR.b/.w/.l (the ORI cases).
+        """
         self._immediate_to_ea(opcode, self._or)
 
     def _op_eori(self, opcode: int) -> None:
-        """EORI -- destination <- destination XOR #data (PRM 4-102; UM Table 8-5)."""
+        """EORI -- destination <- destination XOR #data (PRM 4-102; UM Table 8-5).
+
+        Refills, commit point and bus order: SST EOR.b/.w/.l (the EORI cases).
+        """
         self._immediate_to_ea(opcode, self._eor)
 
     def _op_cmpi(self, opcode: int) -> None:
-        """CMPI -- set N Z V C from destination - #data (PRM 4-79; UM Table 8-5)."""
+        """CMPI -- set N Z V C from destination - #data (PRM 4-79; UM Table 8-5).
+
+        Refills, commit point, and the 2 idle clocks of a long compare with Dn:
+        SST CMP.b/.w/.l (the CMPI cases).
+        """
         size = SIZE[(opcode >> 6) & 3]
         source = self._immediate(size)
         kind = EA_KIND[opcode & 0x3F]
@@ -310,11 +365,20 @@ class ALUMixin:
         self._modify(kind, register, size, operation, data)
 
     def _op_addq(self, opcode: int) -> None:
-        """ADDQ -- destination <- destination + 1..8 (PRM 4-11; UM Table 8-5)."""
+        """ADDQ -- destination <- destination + 1..8 (PRM 4-11; UM Table 8-5).
+
+        ADDQ.W #,An takes 8 clocks, not the 4 UM Table 8-5 prints: SST ADD.b/.w/.l
+        (the ADDQ cases, 118 of them to An) and WinUAE run agree, and 4 clocks is
+        outside the tester's tolerance (docs/claims.md, "Strong").
+        """
         self._quick(opcode, self._add, 1)
 
     def _op_subq(self, opcode: int) -> None:
-        """SUBQ -- destination <- destination - 1..8 (PRM 4-182; UM Table 8-5)."""
+        """SUBQ -- destination <- destination - 1..8 (PRM 4-182; UM Table 8-5).
+
+        Bus order, the 4 idle clocks of the An form and the PC an address error
+        stacks: SST SUB.b/.w/.l (the SUBQ cases).
+        """
         self._quick(opcode, self._sub, -1)
 
     # -- multiprecision (PRM 4-14, 4-184, 4-81) ------------------------------------
@@ -363,18 +427,29 @@ class ALUMixin:
         self._write(size, destination_address, result)
 
     def _op_addx(self, opcode: int) -> None:
-        """ADDX -- destination <- destination + source + X; Z sticky (PRM 4-14)."""
+        """ADDX -- destination <- destination + source + X; Z sticky (PRM 4-14; UM Table 8-11).
+
+        The -(Ay),-(Ax) form's read order (low words first, each register stepping
+        once its high word is next), the write between the closing prefetch and
+        its high word, and the PC an address error stacks: SST ADDX.b/.w/.l.
+        """
         self._extended(opcode, self._addx)
 
     def _op_subx(self, opcode: int) -> None:
-        """SUBX -- destination <- destination - source - X; Z sticky (PRM 4-184)."""
+        """SUBX -- destination <- destination - source - X; Z sticky (PRM 4-184; UM Table 8-11).
+
+        The memory form's read and write order and the PC an address error
+        stacks: SST SUBX.b/.w/.l.
+        """
         self._extended(opcode, self._subx)
 
     def _op_cmpm(self, opcode: int) -> None:
         """CMPM -- set N Z V C from (Ax)+ - (Ay)+ (PRM 4-81; UM Table 8-11).
 
-        Ay steps before each word it reads; Ax only after its operand is in
-        (corpus, T3): an address error leaves Ay moved by 2 and Ax alone.
+        Ay steps before each word it reads; Ax only after its operand is in, so
+        an address error leaves Ay moved by 2 and Ax alone: SST CMP.b/.w/.l (the
+        CMPM cases).  For CMPM.L, WinUAE run leaves the faulting Ay 2 less: the
+        rule is contested and the core follows the gate (docs/claims.md).
         """
         size = SIZE[(opcode >> 6) & 3]
         ay = 8 + (opcode & 7)
@@ -430,33 +505,54 @@ class ALUMixin:
         return 0
 
     def _op_neg(self, opcode: int) -> None:
-        """NEG -- destination <- 0 - destination; X N Z V C (PRM 4-144; UM Table 8-6)."""
+        """NEG -- destination <- 0 - destination; X N Z V C (PRM 4-144; UM Table 8-6).
+
+        Bus order (read, refill, write; a long low word first) and the PC an
+        address error stacks: SST NEG.b/.w/.l.
+        """
         self._unary(opcode, self._negate)
 
     def _op_negx(self, opcode: int) -> None:
-        """NEGX -- destination <- 0 - destination - X; Z sticky (PRM 4-146; UM Table 8-6)."""
+        """NEGX -- destination <- 0 - destination - X; Z sticky (PRM 4-146; UM Table 8-6).
+
+        Bus order and the PC an address error stacks: SST NEGX.b/.w/.l.
+        """
         self._unary(opcode, self._negate_extended)
 
     def _op_not(self, opcode: int) -> None:
-        """NOT -- destination <- ones' complement; N Z, V C cleared (PRM 4-148)."""
+        """NOT -- destination <- ones' complement; N Z, V C cleared (PRM 4-148; UM Table 8-6).
+
+        Bus order and the PC an address error stacks: SST NOT.b/.w/.l.
+        """
         self._unary(opcode, self._complement)
 
     def _op_clr(self, opcode: int) -> None:
-        """CLR -- destination <- 0, the operand read first on the 68000 (PRM 4-73; UM Table 8-6)."""
+        """CLR -- destination <- 0, the operand read first on the 68000 (PRM 4-73; UM Table 8-6).
+
+        The read before the write, the bus order and the PC an address error
+        stacks: SST CLR.b/.w/.l.
+        """
         self._unary(opcode, self._clear)
 
     def _op_tst(self, opcode: int) -> None:
-        """TST -- set N Z from the operand; V C cleared (PRM 4-192; UM Table 8-6)."""
+        """TST -- set N Z from the operand; V C cleared (PRM 4-192; UM Table 8-6).
+
+        Bus order and the PC an address error stacks: SST TST.b/.w/.l.
+        """
         size = SIZE[(opcode >> 6) & 3]
         value = self._ea_read(EA_KIND[opcode & 0x3F], opcode & 7, size)
         self._flags_logic(value, size)
         self._prefetch()
 
     def _op_tas(self, opcode: int) -> None:
-        """TAS -- test a byte, then set its bit 7, in one indivisible bus cycle (PRM 4-190).
+        """TAS -- test a byte, then set its bit 7, indivisibly (PRM 4-190; UM Table 8-6).
 
         The write half goes through the host's ``tas_write`` when it gave
         one: the Genesis bus drops it (docs/undocumented-behavior.md).
+
+        Read, 2 idle clocks, write, then the prefetch (14 clocks for (An)):
+        SST TAS, whose totals WinUAE run confirms on every case it judges, against
+        the corpus README's own doubt (docs/validation.md, "TAS").
         """
         kind = EA_KIND[opcode & 0x3F]
         register = opcode & 7
@@ -480,7 +576,11 @@ class ALUMixin:
     # -- multiply and divide (PRM 4-139, 4-141, 4-93, 4-96; UM Table 8-4) ------
 
     def _op_mulu(self, opcode: int) -> None:
-        """MULU -- Dn <- Dn.w * source.w, unsigned 32-bit product (PRM 4-141)."""
+        """MULU -- Dn <- Dn.w * source.w, unsigned (PRM 4-141; UM Table 8-4).
+
+        The count of 1 bits sets the clocks (38 + 2n, UM Table 8-4's note),
+        spent after the closing prefetch: SST MULU.
+        """
         source = self._ea_read(EA_KIND[opcode & 0x3F], opcode & 7, 2)
         dn = (opcode >> 9) & 7
         product = (self.R[dn] & 0xFFFF) * source
@@ -490,7 +590,11 @@ class ALUMixin:
         self.R[dn] = product
 
     def _op_muls(self, opcode: int) -> None:
-        """MULS -- Dn <- Dn.w * source.w, signed 32-bit product (PRM 4-139)."""
+        """MULS -- Dn <- Dn.w * source.w, signed (PRM 4-139; UM Table 8-4).
+
+        The count of 01/10 transitions sets the clocks (UM Table 8-4's note),
+        spent after the closing prefetch: SST MULS.
+        """
         source = self._ea_read(EA_KIND[opcode & 0x3F], opcode & 7, 2)
         dn = (opcode >> 9) & 7
         product = (sign_extend_16(self.R[dn]) * sign_extend_16(source)) & 0xFFFFFFFF
@@ -500,7 +604,13 @@ class ALUMixin:
         self.R[dn] = product
 
     def _op_divu(self, opcode: int) -> None:
-        """DIVU -- Dn <- Dn / source.w: 16-bit remainder:quotient, unsigned (PRM 4-96)."""
+        """DIVU -- Dn <- Dn / source.w, unsigned; remainder:quotient (PRM 4-96; UM Table 8-4).
+
+        The data-dependent clocks (``divide_unsigned_clocks``) and the overflow
+        flags N=1 V=1 Z=0 C=0, undefined in PRM: SST DIVU on every case, and
+        WinUAE run (docs/undocumented-behavior.md).  Division by zero is
+        ``_divide_by_zero``, whose flags no corpus has: WinUAE run pins them.
+        """
         source = self._ea_read(EA_KIND[opcode & 0x3F], opcode & 7, 2)
         dn = (opcode >> 9) & 7
         dividend = self.R[dn]
@@ -519,7 +629,13 @@ class ALUMixin:
         self._prefetch()
 
     def _op_divs(self, opcode: int) -> None:
-        """DIVS -- Dn <- Dn / source.w: 16-bit remainder:quotient, signed (PRM 4-93)."""
+        """DIVS -- Dn <- Dn / source.w, signed; remainder:quotient (PRM 4-93; UM Table 8-4).
+
+        The data-dependent clocks (``divide_signed_clocks``, Cwik's analysis) and
+        the overflow flags N=1 V=1 Z=0 C=0, undefined in PRM: SST DIVS on every
+        case, and WinUAE run.  Division by zero is ``_divide_by_zero``, whose
+        flags no corpus has: WinUAE run pins them.
+        """
         source = self._ea_read(EA_KIND[opcode & 0x3F], opcode & 7, 2)
         dn = (opcode >> 9) & 7
         dividend = self.R[dn] - 0x100000000 if self.R[dn] & 0x80000000 else self.R[dn]

@@ -285,7 +285,8 @@ class CoreMixin:
         """Two word writes, low word (at address + 2) first.
 
         The order of -(An) destinations and of read-modify-write results:
-        the microcode works toward the high word (corpus, T3).  An odd
+        the microcode works toward the high word (SST MOVE.l, ADDX.l, SUBX.l,
+        MOVEM.l and the long read-modify-write files; T3).  An odd
         address faults on the first write, at ``address + 2``.
         """
         self._write_word(address + 2, value)
@@ -357,7 +358,8 @@ class CoreMixin:
         """
         self._fault_pc = self._pc
         # IR takes IRC, and the decoder (IRD) takes IR, before the read: an
-        # address error on this read already stacks the next opcode (T3).
+        # address error on this read already stacks the next opcode (every
+        # faulting closing prefetch of the corpus; T3).
         self.ir = self._opcode = self.irc
         self.irc = self._read_program_word(self._pc)
         self._pc = (self._pc + 2) & 0xFFFFFFFF
@@ -367,7 +369,8 @@ class CoreMixin:
 
         IR takes IRC and IRC refills, but the decoder keeps the current
         opcode until the handler hands it over with ``self._opcode =
-        self.ir`` at the step the microcode does (T3): an address error on
+        self.ir`` at the step the microcode does (SST MOVE.l, PEA; T3): an
+        address error on
         a write before that point stacks the old opcode.
         """
         self._fault_pc = self._pc
@@ -469,7 +472,8 @@ class CoreMixin:
         """Address or bus error: abort, stack the seven-word frame (UM Figure 6-7).
 
         The aborted access costs its four clocks and four more; two internal
-        steps of two clocks follow (corpus, T3).  The frame is written in
+        steps of two clocks follow (the corpus's 55,606 address errors, T3;
+        WinUAE run agrees on the clocks).  The frame is written in
         the corpus's order: PC low, SR, PC high, IR, access address low,
         access information, access address high.  A second group 0 fault
         while doing this halts the processor (UM 5.4.4).
@@ -478,7 +482,8 @@ class CoreMixin:
             self._address_error_hook(fault.address & MASK24, fault.write, self._fc(fault.program))
         self._cycles += 4 + 4 + 2 + 2
         # The access information word: bits 15-5 are the undefined part and
-        # carry IR's (corpus, T3; UM Figure 6-7 marks them undefined), R/W is
+        # carry IR's (the corpus's faulting cases, T3; WinUAE run agrees on
+        # every frame it judges; UM Figure 6-7 marks them undefined), R/W is
         # bit 4, I/N bit 3 (set when the access was part of exception
         # processing rather than of an instruction), and the function code.
         information = (
