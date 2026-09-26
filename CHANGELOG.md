@@ -69,6 +69,16 @@ what no available evidence settles.
   Oracles workflow that rebuilds the referees and fails when any recorded
   number moves.
 
+### Changed
+
+- **9% faster on CPython, 37% on PyPy** (the `base` workload): a speed
+  ladder of five candidate rungs, one commit per rung, every oracle green
+  at each and measured with `benchmarks/compare_revisions.py`. Kept:
+  `MASK`/`MSB` as tuples (A) and the refills reading the program word
+  themselves (C); reverted or not adopted: the A7 byte step inlined (B),
+  flags computed inside `_add` (D), the function-code wrappers (E). The
+  table is in docs/validation.md, "Speed".
+
 ### Fixed
 
 Each as a failing test first, then the fix, in the verification rounds

@@ -186,6 +186,12 @@ point; the core models no wait states, so the host adds its own stall
 clocks to the total. [The interrupt lifecycle](docs/interrupt-lifecycle.md)
 has the whole host protocol.
 
+Speed, on the `base` workload of `benchmarks/m68000_core_benchmark.py`
+(2026-09-25, a shared machine at load 12): about 1.4 million instructions
+per second on CPython 3.14.4 and about 33 million on PyPy 7.3.20; a Mega
+Drive's 68000 executes about 1 million a second. The four workloads and the
+polish round's speed ladder are in [the validation record](docs/validation.md#speed).
+
 ## Reference-core boundary
 
 `m68000-python` owns:

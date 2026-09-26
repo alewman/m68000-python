@@ -72,13 +72,40 @@ and the weekly Oracles workflow reruns it.
 ## Speed
 
 Measured with `benchmarks/compare_revisions.py`, the same-process A/B of two
-revisions (the shared machine's load moves separate runs by ±30%, which
-would bury a small change). The ladder of the polish round, one commit per
-rung, every oracle green at each, a rung that did not pay reverted, is
-recorded here by item 7 of the polish brief; until then the absolute rates
-of `benchmarks/m68000_core_benchmark.py` on 2026-09-25 (CPython 3.14.4,
-load about 10) are: base 1.23 M instructions/s, memory 0.67 M, arithmetic
-1.06 M, exceptions 1.27 M.
+revisions: each is imported into one interpreter and the four workloads of
+`benchmarks/m68000_core_benchmark.py` are timed alternately, best of 30 in
+CPU time, so the shared machine's load (which moves separate runs by ±30%)
+cannot bury a small change. The polish round's ladder (2026-09-25), one
+commit per rung, every oracle green at each, a rung gaining under 5% on both
+interpreters reverted:
+
+| Rung | Change | CPython 3.14.4: base / memory / arithmetic / exceptions | PyPy 7.3.20 | Outcome |
+| --- | --- | --- | --- | --- |
+| A | `MASK` and `MSB` as tuples indexed by size, not dicts | x1.027 / 1.000 / 1.021 / 0.984 | x1.353 / 1.047 / 1.172 / 1.021 | kept |
+| B | the A7 byte step written out at its ten call sites instead of `_step_size` | x1.013 / 0.997 / 0.997 / 1.003 | x0.978 / 0.911 / 1.009 / 1.000 | reverted |
+| C | the three refills read the program word themselves instead of calling `_read_program_word` | x1.060 / 1.033 / 1.046 / 1.046 | x1.013 / 1.010 / 0.987 / 1.009 | kept |
+| D | the flag rule computed inside `_add` instead of in `_flags_add` (prototype on ADD alone) | x1.022 / 0.992 / 0.995 / 0.977 | x0.995 / 1.009 / 0.990 / 0.998 | not adopted: below the rule, and the coverage probe and 17 mutants observe `_flags_*` |
+| E | the six function-code wrappers built once | not measurable: they run only for a host that passes `function_codes=True`, which the benchmark host and every board do not | | declined |
+
+Dispatch was already one 65,536-entry table and SR one packed int before
+the ladder; what remains is Python frame depth (a memory-operand ALU
+instruction is eight to nine frames), which only a different core shape
+would remove. The ladder's total, rung A times rung C: CPython base x1.09,
+PyPy base x1.37.
+
+Absolute rates after the ladder, `benchmarks/m68000_core_benchmark.py`
+(median of 5 samples in wall time, warm, load average about 12 on the
+shared machine; the A/B's best-of-30 CPU-time samples run higher):
+
+| Workload | CPython 3.14.4 | PyPy 7.3.20 |
+| --- | ---: | ---: |
+| base (a copy loop through (An)+, DBF) | 1.39 M instr/s | 32.9 M |
+| memory (long moves, MOVEM, PEA) | 0.65 M | 18.7 M |
+| arithmetic (MULU, DIVU, shifts, ABCD) | 1.18 M | 19.1 M |
+| exceptions (TRAP #0, RTE) | 1.32 M | 33.5 M |
+
+A Mega Drive's 68000 executes about 1 million instructions a second, so
+PyPy runs the core well above real time and CPython near it.
 
 ### What each corpus case compares
 
