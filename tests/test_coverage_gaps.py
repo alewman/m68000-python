@@ -1275,3 +1275,25 @@ def test_the_words_no_renaming_reaches_match_the_manual():
             for address in written | set(memory):
                 expected = memory[address] if address in memory else before[address]
                 assert bus.memory[address] == expected, f"{what}: byte {address:06X}"
+
+
+def test_an_odd_reset_vector_is_a_double_bus_fault_that_halts():
+    """RESET -- an address error while the reset exception fetches its first
+    instruction is a double bus fault: the processor halts until reset again
+    (UM 5.4.4 names the reset exception among the sequences whose fault
+    halts; 6.3.1).  No corpus has a reset-pin case; this is the manual's rule.
+    """
+    bus = Bus()
+    bus.set_long(0, STACK)
+    bus.set_long(4, 0x1001)  # an odd initial PC: the first instruction fetch faults
+    cpu = M68000CPU(bus.read_byte, bus.read_word, bus.write_byte, bus.write_word)
+    clocks = cpu.reset()
+    assert cpu.halted
+    assert clocks > 0
+    assert cpu.step() == 4  # idles, halted
+    assert (
+        bus.log.count(("rw", 0x1001, bus.word(0x1001))) == 0
+    )  # the odd read never reached the bus
+    bus.set_long(4, 0x1000)
+    cpu.reset()
+    assert not cpu.halted and cpu.PC == 0x1000
