@@ -188,7 +188,9 @@ are defensive `AssertionError`s the decoder makes unreachable; and 4 are
 long branch of `_write`, which no caller reaches (every long write goes
 through `_write_long` or `_write_long_low_first` directly); both were
 removed on 2026-09-21 (7e8237f). The tooling modules (debug,
-console, disasm, trace, `__main__`) are exercised by tests/test_tooling.py
+console, disasm, trace, `__main__`) are exercised by their own test files
+(tests/test_public_api.py, test_debug_session.py, test_trace_comparison.py,
+test_command_debugger.py, test_disasm.py, test_main.py)
 and are outside this report's scope.
 
 ## 4. Open gaps

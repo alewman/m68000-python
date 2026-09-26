@@ -26,15 +26,25 @@ what WinUAE's run decides, the claim rests on emulator-derived oracles
 (MAME's microcode transcription): strong detectors, not a hardware
 judgement.
 
-## Certification record
+## Certification record: commit `812cd8d` (2026-09-25), release 0.1.0
 
-Linux x86_64, a shared 32-core machine at a load average of 30-50 (timings
-are upper bounds). CPython 3.14.4; PyPy 7.3.23 / Python 3.11.15.
+Every gate, both interpreters, against the commit named above; the record
+is rerun and this heading updated at the release commit (the commits after
+it change documents, workflows and packaging). Linux x86_64, a shared
+32-core machine under other users' load (timings are upper bounds; "Speed"
+below has the load-independent comparison). CPython 3.14.4; PyPy 7.3.20 /
+Python 3.11.13.
 
 | Gate | Tier | Pin | Result | CPython | PyPy |
 | --- | --- | --- | --- | ---: | ---: |
+| The whole suite (`pytest -q` with the corpus fetched): decoder, readability, BCD, the manual-derived and referee-pinned tests, the tooling, the gate and `step_clocks` | -- | -- | 2,148 passed | 20.6 s | 25.6 s |
 | BCD tables: ABCD 262,144 + SBCD 262,144 + NBCD 1,024 inputs, result and X N Z V C (`tests/test_bcd.py`) | T1 | flamewing/68k-bcd-verifier `39a01be528b0744302bf1dc9b3463fc22a3fc45f`, table SHA-256 `8432868c…80147e5` | all agree | 0.8 s | 0.9 s |
-| SingleStepTests/m68000, 127 files, 317,500 cases (`tests/test_corpus.py`) | T3 (microcode) | `64b253116a3de04aaac4346c43680960dc9b67e5` | 317,500 / 317,500 | 27 s | 26 s |
+| SingleStepTests/m68000, 127 files, 317,500 cases (`tests/test_corpus.py`) | T3 (microcode) | `64b253116a3de04aaac4346c43680960dc9b67e5` | 317,500 / 317,500 | 15 s | 14 s |
+| `step_clocks` at every access end of the 261,894 cases without an address error (`tests/test_step_clocks.py`) | T3 (microcode) | the same | all agree | (in the above) | |
+| WinUAE's CPU-tester core vs the gate, run (`validation/referees/calibrate.py winuae`) | T2 in scope | WinUAE `1977af50` | 308,416 / 314,988 judged | -- | 56 s |
+| Musashi vs the gate, run (`calibrate.py musashi`) | T3 | Musashi `313ebf1b` | 257,300 / 261,894 judged | -- | ~60 s |
+| SingleStepTests/680x0 as a detector (`scripts/classify_680x0.py`) | T3 | `e0d5ece9` | 787,660 / 1,000,060, every disagreement classified | -- | ~2 min |
+| MAME 0.285 lockstep, System 16B and Genesis Altered Beast (`validation/lockstep.py`, rung 4 below) | T3 | `mame0285` | 24,595,631 + 28,249,660 instructions identical | -- | 563 + 510 s |
 | Decoder: 65,536 first words vs MAME 0.285 `m68000.lst` (`scripts/check_decoder_vs_mame.py`, listing SHA-256 `9b4605ef…95631`) | T3 | `mame0285` | 45,815 defined + ILLEGAL + 8,192 line A/F, every word's family agrees, 0 of 65,536 differ | 4 s | -- |
 
 Commands, from the repository root with the corpus fetched
@@ -49,6 +59,26 @@ python scripts/check_decoder_vs_mame.py       # the decoder against MAME's listi
 `M68000_BCD_TABLE=path/to/bcd-table.bin` makes the BCD gate compare byte by
 byte against a locally generated table (build `bcd-gen.cc` at the pin with
 any C++ compiler and run it); without it the gate compares SHA-256.
+
+What a reader cannot reproduce from the repository alone: the MAME lockstep
+and `validation/disasm_vs_mame.py` need MAME 0.285 and the `altbeast`
+romset or the Genesis ROM (their command lines are below; the disassembly
+golden they wrote is committed and checked in CI); the transistorfet T1 row
+in the summary below rests on reading that project's README, not on a run
+here. Everything else has its command in this page, in
+[referees](referees.md), [coverage](coverage.md) or [mutation](mutation.md),
+and the weekly Oracles workflow reruns it.
+
+## Speed
+
+Measured with `benchmarks/compare_revisions.py`, the same-process A/B of two
+revisions (the shared machine's load moves separate runs by ±30%, which
+would bury a small change). The ladder of the polish round, one commit per
+rung, every oracle green at each, a rung that did not pay reverted, is
+recorded here by item 7 of the polish brief; until then the absolute rates
+of `benchmarks/m68000_core_benchmark.py` on 2026-09-25 (CPython 3.14.4,
+load about 10) are: base 1.23 M instructions/s, memory 0.67 M, arithmetic
+1.06 M, exceptions 1.27 M.
 
 ### What each corpus case compares
 
@@ -260,6 +290,7 @@ until someone runs the same case on silicon.
 
 | Oracle | Tier | License | Pin | Coverage | Status here |
 | --- | --- | --- | --- | --- | --- |
+| MAME 0.285 `m68000.lst`, the microcoded core's decode table | T3 | BSD-3-Clause | `mame0285`, SHA-256 `9b4605ef…95631` | which of the 65,536 first words are which instruction | **Checked word for word** by `scripts/check_decoder_vs_mame.py`: 45,815 defined words agree, 0 differ |
 | flamewing/68k-bcd-verifier | T1 | GPL-3.0 | `39a01be528b0744302bf1dc9b3463fc22a3fc45f` (2018-08-31) | ABCD, SBCD, NBCD: all inputs, all flags | **Gate: all 525,312 inputs agree** (generator run locally, table hashed) |
 | transistorfet/68k-test-runner | T1 (tiny) | GPL-3.0 | `5b10d9f68a3f4370e02f5bda8afd28d2a86e69e7` (2023-06-12) | ASL.b, ASR.b of the 2023 Harte corpus on a real 68000 board | Not fetched; evidence only |
 | WinUAE `cputest` and its 68000 core | T2 (inside cputest's checked scope) | GPL-2.0+ | `1977af501f6c3389c2eefe119ecb10c82d6582f3` (2026-09-17) | Integer instructions, undefined flags, address/bus error frames, cycle counts to ±2 (7 MHz Amiga) | **Built and run** (validation/referees, not committed): vs the gate 308,416 / 314,988 judged cases agree; the 680x0 table re-derived; [referees](referees.md) |

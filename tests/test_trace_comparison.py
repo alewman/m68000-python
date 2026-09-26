@@ -272,3 +272,22 @@ def test_accesses_are_compared_only_when_both_records_carry_them() -> None:
     altered["accesses"][0][2] = 0x4E70
     differences = compare_step_records(tracked, step_record_from_dict(altered))
     assert [item.path for item in differences] == ["accesses"]
+
+
+# -- the committed reference trace ---------------------------------------------
+
+
+def test_committed_reference_trace_is_what_this_package_writes_today() -> None:
+    """examples/reference_trace.jsonl never goes stale: regenerate and compare."""
+    from examples.reference_trace import OUTPUT, STEPS, records, text
+
+    assert OUTPUT.read_text(encoding="utf-8") == text()
+    with OUTPUT.open(encoding="utf-8") as stream:
+        committed = tuple(read_trace(stream))
+    assert len(committed) == STEPS
+    assert first_trace_divergence(committed, records()) is None
+    assert [record.kind.value for record in committed[-3:]] == [
+        "instruction",
+        "stopped_idle",
+        "stopped_idle",
+    ]

@@ -172,6 +172,11 @@ These need hardware that this project does not have.
 
   The core keeps the gate's values. A logic-analyser capture would settle
   them.
+- **The reset exception's total.** `reset()` returns 42 clocks: 16
+  internal, the four vector reads, and the two-read refill with the 2 idle
+  clocks every exception entry's refill has. UM Table 8-14 prints 40(6/0).
+  No corpus has a reset-pin case and the referees were not run on one
+  (found 2026-09-25).
 - **The double bus fault.** The core halts, as UM 5.4.4 says, and so do
   Musashi (run, with an odd SSP) and WinUAE's emulator (read). MAME takes another address
   error instead. cputest skips every test that would halt.
@@ -238,6 +243,7 @@ exception model.
   microcode transcription, over 317,500 single-step cases and 52.8
   million instructions of real game code in lockstep.
 - **Not settled by available evidence:** six address-error behaviours
-  where credible sources disagree, three 2-clock timing questions, and the
-  double bus fault, each listed with what would settle it.
+  where credible sources disagree, three 2-clock timing questions, the
+  reset exception's total, and the double bus fault, each listed with what
+  would settle it.
 - **Not claimed:** bus-error frame contents.
