@@ -174,8 +174,12 @@ class M68000CPU(
         """Start executing at ``address``: refill the prefetch queue from it.
 
         Two program reads, as a jump does; no clocks are counted.  The host
-        uses this instead of a reset when it loads a program itself.
+        uses this instead of a reset when it loads a program itself.  An odd
+        address is refused: instructions live at even addresses (UM 6.3.10),
+        and a jump to an odd one is an address error, not a start.
         """
+        if address & 1:
+            raise ValueError("an instruction address must be even")
         address &= 0xFFFFFFFF
         self.ir = self._read_program(address & MASK24)
         self.irc = self._read_program((address + 2) & MASK24)

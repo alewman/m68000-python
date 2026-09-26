@@ -110,6 +110,14 @@ def test_set_ipl_and_the_acknowledge_answers_are_the_lifecycle_api() -> None:
     assert AUTOVECTOR == -1  # a documented answer of acknowledge(level)
 
 
+def test_set_pc_refuses_an_odd_address() -> None:
+    processor, _ = make([0x4E71])
+    with pytest.raises(ValueError, match="even"):
+        processor.set_pc(0x1001)
+    processor.set_pc(0x1002)
+    assert processor.PC == 0x1002
+
+
 def test_step_clocks_is_read_only() -> None:
     processor, _ = make([0x4E71])
     assert processor.step_clocks == 42  # the reset's total, between steps
@@ -182,6 +190,7 @@ def test_restore_puts_each_stack_pointer_in_its_place() -> None:
         {"a": (0,) * 8},
         {"ir": 0x10000},
         {"pc": -1},
+        {"pc": 0x1001},
         {"stopped": 1},
         {"clock": -1},
         {"d": (0.5,) + (0,) * 7},

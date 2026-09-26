@@ -87,6 +87,8 @@ def test_every_cpu_state_field_participates_in_the_comparison() -> None:
             changed_value = (current[0] ^ 1, *current[1:])
         elif field.name == "ipl":
             changed_value = (current + 1) % 8
+        elif field.name == "pc":
+            changed_value = current ^ 2  # an instruction address stays even
         else:
             changed_value = current ^ 1
         changed = replace(record, before=replace(record.before, **{field.name: changed_value}))

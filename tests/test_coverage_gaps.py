@@ -763,6 +763,53 @@ BUS_ERROR_ACCESSES = (
 )
 
 
+@pytest.mark.parametrize(
+    ("name", "program"),
+    [
+        ("the closing prefetch of NOP", [NOP]),
+        ("the refill after MOVE.W #imm's extension word", [0x303C, 0x1234]),
+        ("the early prefetch of PEA (A0), before its push", [0x4850]),
+    ],
+)
+def test_a_bus_error_on_a_queue_refill_is_a_program_space_read_fault(name, program):
+    """BERR on the queue's own reads: the refill at the end of every instruction,
+    the refill after an extension word, and the refill PEA makes before it
+    pushes (UM 6.3.9.1; the prefetch reads are program references, UM Table
+    3-2).  Asserted as for the operand accesses above; the stacked PC and IR
+    are not asserted (docs/claims.md, "Outside the contract").
+    """
+    bus = Bus()
+    start = 0x8FFFFC  # the refill reads $900000, where BERR is asserted
+
+    def guard(access):
+        def guarded(address, *value):
+            if address & 0xFF0000 == 0x900000:
+                raise BusError(address)
+            return access(address, *value)
+
+        return guarded
+
+    bus.set_long(0, STACK)
+    bus.set_long(4, start)
+    bus.set_long(2 * 4, 0x3000)
+    bus.load(0x3000, [NOP] * 4)
+    bus.load(start, program)
+    cpu = M68000CPU(
+        guard(bus.read_byte), guard(bus.read_word), guard(bus.write_byte), guard(bus.write_word)
+    )
+    cpu.reset()
+    cpu.R[8] = 0x4000
+    cpu.step()
+    assert cpu.PC == 0x3000, f"{name}: the bus-error handler runs"
+    sp = cpu.R[15]
+    assert sp == STACK - 14, f"{name}: a seven-word frame"
+    information = bus.word(sp)
+    assert information & 0x10, f"{name}: R/W says read"
+    assert not information & 0x08, f"{name}: I/N, part of an instruction"
+    assert information & 0x07 == 6, f"{name}: supervisor program space"
+    assert bus.long(sp + 2) == 0x900000, f"{name}: the refill's address"
+
+
 @pytest.mark.parametrize(("name", "start", "program", "read", "fc", "address"), BUS_ERROR_ACCESSES)
 def test_a_bus_error_takes_vector_two_with_the_group_zero_frame(
     name, start, program, read, fc, address

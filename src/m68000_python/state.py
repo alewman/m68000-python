@@ -22,7 +22,8 @@ class CPUState:
     Host memory, devices and scheduling are excluded: restoring this value
     restores the processor, not a machine.
 
-    ``pc`` is the address of the instruction in ``ir``; the queue has read
+    ``pc`` is the address of the instruction in ``ir``, always even (a jump
+    to an odd address faults before it becomes PC); the queue has read
     ``irc`` from ``pc + 2`` and will next read ``pc + 4`` (the SingleStepTests
     corpus's ``pc``).  Stopped by STOP, ``pc`` is the STOP's own address and
     execution resumes at ``pc + 4``.
@@ -54,6 +55,8 @@ class CPUState:
             _require_int(f"a{index}", value, 0xFFFFFFFF)
         for name in ("usp", "ssp", "pc"):
             _require_int(name, getattr(self, name), 0xFFFFFFFF)
+        if self.pc & 1:
+            raise ValueError("pc must be even: instructions live at even addresses")
         for name in ("ir", "irc"):
             _require_int(name, getattr(self, name), 0xFFFF)
         _require_int("sr", self.sr, 0xFFFF)

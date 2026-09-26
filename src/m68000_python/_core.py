@@ -348,13 +348,15 @@ class CoreMixin:
     # The three refills below write _read_program_word's body out instead of
     # calling it: they run once or more per instruction, and a Python frame
     # is the cost that dominates this core (rung C, docs/validation.md "Speed").
+    # They make no odd-address check because _pc is always even: every path
+    # that sets it either faults first on an odd target (_jump, _jump_idle,
+    # DBcc, JSR read the target's word through _read_program_word before
+    # taking it) or refuses one (set_pc, CPUState), and the refills add 2.
 
     def _extension(self) -> int:
         """Take the extension word waiting in IRC and refill IRC from _pc."""
         value = self.irc
         address = self._pc
-        if address & 1:
-            raise self._fault(VECTOR_ADDRESS_ERROR, address, False, True)
         self._cycles += 4
         try:
             self.irc = self._read_program(address & MASK24)
@@ -374,12 +376,11 @@ class CoreMixin:
         extension word in IRC (UM "Prefetch"; corpus ``prefetch`` pair).
         """
         address = self._fault_pc = self._pc
-        # IR takes IRC, and the decoder (IRD) takes IR, before the read: an
-        # address error on this read already stacks the next opcode (every
-        # faulting closing prefetch of the corpus; T3).
+        # IR takes IRC, and the decoder (IRD) takes IR, before the read: a
+        # bus error on this read already stacks the next opcode (every
+        # faulting closing prefetch of the corpus, T3, where the fault is an
+        # odd jump target's caught in _jump before the queue moves).
         self.ir = self._opcode = self.irc
-        if address & 1:
-            raise self._fault(VECTOR_ADDRESS_ERROR, address, False, True)
         self._cycles += 4
         try:
             self.irc = self._read_program(address & MASK24)
@@ -398,8 +399,6 @@ class CoreMixin:
         """
         address = self._fault_pc = self._pc
         self.ir = self.irc
-        if address & 1:
-            raise self._fault(VECTOR_ADDRESS_ERROR, address, False, True)
         self._cycles += 4
         try:
             self.irc = self._read_program(address & MASK24)

@@ -64,8 +64,13 @@ VECTORS = TESTS / "68000_test_vectors" / "m68000" / "v1"
 #: Every test module except the corpus gate, run whole for every mutant.  The
 #: list is read from tests/ when a run starts, and each result records the
 #: modules it ran.
+#: Every test module but the two that need the fetched corpus (the gate runs
+#: per mutant on the files the mutant names; step_clocks is the same lineage
+#: and the gate's clock totals already see a clock mutant) and the benchmark
+#: harness's smoke test, which measures nothing about the core.
+NOT_FAST = ("test_corpus.py", "test_step_clocks.py", "test_benchmark.py")
 FAST_TESTS = tuple(
-    sorted(path.name for path in TESTS.glob("test_*.py") if path.name != "test_corpus.py")
+    sorted(path.name for path in TESTS.glob("test_*.py") if path.name not in NOT_FAST)
 )
 #: Modules added in the coverage and mutation session (docs/coverage.md,
 #: docs/mutation.md).  Kills by these alone are reported separately, to show
@@ -928,7 +933,7 @@ def child_detect(tree: str, stems: list[str]) -> dict:
 
 def child(tree: str, corpus: list[str], tests: list[str]) -> dict:
     """Run in the child process: import the tree, run the corpus files and tests."""
-    sys.path[:0] = [tree, str(TESTS)]
+    sys.path[:0] = [tree, str(TESTS), str(ROOT)]  # ROOT for examples/, imported by a test
     import m68000_python
 
     loaded = Path(m68000_python.__file__).resolve()
