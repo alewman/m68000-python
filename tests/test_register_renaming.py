@@ -31,7 +31,7 @@ registers by bit, and all 140 MOVEM words are executed by the gate.
 
 The field positions come from ``_dispatch.RULES``, the core's transcription
 of PRM Section 8's encodings (checked word for word against MAME 0.285's
-decoder, docs/worklog.md); which fields name registers is stated here, from
+decoder, docs/history/worklog.md); which fields name registers is stated here, from
 the manual.  Nothing here says what an instruction should do -- only that
 the answer does not depend on which register holds the operand.  A word the
 gate executes is evidence for all of its renamings.

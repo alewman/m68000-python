@@ -2,7 +2,7 @@
 
 MAME's 68000 is the microcoded core (see [validation](validation.md), tier
 T3). Running a real System 16 game under it and logging one line per
-instruction gives a long-sequence oracle for the future core: the same ROM,
+instruction gives a long-sequence oracle for the core: the same ROM,
 the same reset, the same vblank interrupts, compared instruction by
 instruction. This page records the exact command line, the Lua script, the
 register names, what came out, and the traps. Everything here was run on
@@ -129,9 +129,8 @@ usable in `logerror` expressions and the debugger, case-insensitive:
 There is no `a7`, `ssp`, `ccr` or `vbr` symbol. In the runs above, `pc` in
 the `logerror` line printed values such as `402` while the trace file's
 first line was `000400`, consistent with `pc` being `curpc + 2` at the
-moment the trace action runs; the future lockstep comparer must decide
-which of the two it matches and record that choice. `curpc` is the safer
-field.
+moment the trace action runs. `validation/lockstep.py` logs and compares
+`curpc` ([validation](validation.md), rung 4).
 
 ## What the trace does and does not give
 
@@ -152,7 +151,7 @@ field.
 - `device.debug:bpset` from Lua segfaulted MAME 0.285; use `dbg:command`
   strings for breakpoints too.
 
-## Boards and clocks for the future host
+## Boards and clocks for a host
 
 `altbeast` (`sega/segas16b.cpp`): 68000 at 10 MHz, level-4 vblank
 interrupt (`irq4_line_hold`), 60.054 Hz, i8751 MCU. `shinobi`

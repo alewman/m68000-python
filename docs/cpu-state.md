@@ -21,6 +21,32 @@ device, no memory. Restoring a state restores the processor, not a machine.
 
 The queue is part of the state because the chip's is: a program that
 modifies the word after the current instruction sees the old word run
-(docs/start-here.md, "Prefetch"). A state captured between instructions
-restores exactly; one captured by a host inside a bus callback is not a
-boundary and is not supported.
+([start-here](start-here.md), "Prefetch"). A state captured between
+instructions restores exactly; one captured by a host inside a bus callback
+is not a boundary and is not supported.
+
+Construction validates every field's type and range; the value is
+comparable, hashable and `dataclasses.asdict()`-friendly. This release does
+not promise that the dictionary is a permanent cross-version save format;
+the versioned form is the state object of [the trace schema](trace-schema.md).
+
+## Machine boundary
+
+`CPUState` excludes everything the host owns: memory, mappers and devices;
+video, audio and input; frame and interrupt scheduling and the host's own
+clocks; queued device events. Restoring only `CPUState` is correct when the
+host's state has not changed, or when the host restores its own matching
+state beside it. It is not whole-machine rewind.
+
+## Example
+
+```python
+before = cpu.capture_state()
+memory_before = bytes(memory)  # the host's, not the CPU's
+
+cpu.step()
+
+memory[:] = memory_before
+cpu.restore_state(before)
+assert cpu.capture_state() == before
+```

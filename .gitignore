@@ -20,6 +20,8 @@ tests/68000_test_vectors/
 
 # MAME oracle runs: traces, error.log, nvram, cfg. Never commit ROMs or traces.
 validation/mame_runs/
+# MAME's m68000.lst, fetched at a pinned tag by scripts/check_decoder_vs_mame.py.
+validation/mame/
 *.trace
 error.log
 

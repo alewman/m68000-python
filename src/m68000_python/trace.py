@@ -14,7 +14,7 @@ from itertools import zip_longest
 from typing import TextIO
 
 from m68000_python.debug import BoundaryKind, DebugSession, StepRecord
-from m68000_python.disasm import disassemble_bytes
+from m68000_python.disasm import Instruction, disassemble_bytes
 from m68000_python.state import CPUState
 
 TRACE_SCHEMA_VERSION = 1
@@ -31,6 +31,12 @@ class TraceDifference:
     path: str
     left: TraceValue
     right: TraceValue
+
+    def __post_init__(self) -> None:
+        if type(self.path) is not str or not self.path:
+            raise ValueError("path must be a non-empty string")
+        if self.left == self.right:
+            raise ValueError("a TraceDifference records unequal values")
 
     def as_dict(self) -> dict[str, TraceValue]:
         return {"path": self.path, "left": self.left, "right": self.right}
@@ -90,13 +96,21 @@ def step_record_from_dict(data: dict) -> StepRecord:
         raise ValueError(f"trace record keys must be {sorted(_RECORD_KEYS)} (+ accesses)")
     if data["version"] != TRACE_SCHEMA_VERSION:
         raise ValueError(f"unsupported trace version {data['version']!r}")
+    for key in ("sequence", "cycles"):
+        if type(data[key]) is not int:
+            raise ValueError(f"{key} must be an integer")
+    if type(data["kind"]) is not str:
+        raise ValueError("kind must be a string")
     instruction = None
     if data["instruction"] is not None:
-        spec = data["instruction"]
-        instruction = disassemble_bytes(bytes.fromhex(spec["data"]), spec["address"])
+        instruction = _instruction_from_dict(data["instruction"])
     accesses = None
     if "accesses" in data:
-        accesses = tuple(tuple(access) for access in data["accesses"])
+        if type(data["accesses"]) is not list:
+            raise ValueError("accesses must be a list")
+        accesses = tuple(
+            tuple(access) if type(access) is list else access for access in data["accesses"]
+        )
     return StepRecord(
         sequence=data["sequence"],
         kind=BoundaryKind(data["kind"]),
@@ -106,6 +120,37 @@ def step_record_from_dict(data: dict) -> StepRecord:
         instruction=instruction,
         accesses=accesses,
     )
+
+
+def _instruction_from_dict(spec: object) -> Instruction:
+    """Rebuild an instruction from its bytes; text, when present, must be complete and agree.
+
+    A producer in another language writes only ``address`` and ``data``; this
+    package's disassembler supplies the text, so two traces of the same bytes
+    compare equal whoever wrote them.
+    """
+    if type(spec) is not dict:
+        raise ValueError("instruction must be an object or null")
+    keys = set(spec)
+    if not {"address", "data"} <= keys or keys - {"address", "data", "mnemonic", "operands"}:
+        raise ValueError("instruction fields are address, data and optionally mnemonic + operands")
+    if ("mnemonic" in keys) != ("operands" in keys):
+        raise ValueError("instruction fields mnemonic and operands come together")
+    if type(spec["address"]) is not int or type(spec["data"]) is not str:
+        raise ValueError("instruction address must be an integer and data a hex string")
+    try:
+        data = bytes.fromhex(spec["data"])
+    except ValueError:
+        raise ValueError("instruction data must be hexadecimal") from None
+    try:
+        instruction = disassemble_bytes(data, spec["address"])
+    except ValueError as exc:
+        raise ValueError(f"instruction data must hold exactly one instruction: {exc}") from None
+    if "mnemonic" in keys and (
+        spec["mnemonic"] != instruction.mnemonic or tuple(spec["operands"]) != instruction.operands
+    ):
+        raise ValueError("instruction text does not match its bytes")
+    return instruction
 
 
 def write_trace(records: Iterable[StepRecord], stream: TextIO) -> int:
@@ -145,6 +190,8 @@ def compare_step_records(left: StepRecord, right: StepRecord) -> tuple[TraceDiff
 
     Bus accesses are compared only when both records carry them.
     """
+    _require_record(left, "compared records")
+    _require_record(right, "compared records")
     out: list[TraceDifference] = []
     _append(out, "kind", left.kind.value, right.kind.value)
     _append(out, "cycles", left.cycles, right.cycles)
@@ -171,10 +218,14 @@ def iter_trace_divergences(
     """Yield every unequal aligned position, lazily, until both traces end."""
     for position, (a, b) in enumerate(zip_longest(left, right, fillvalue=_MISSING)):
         if a is _MISSING:
+            _require_record(b, "traces")
             yield TraceDivergence(position, None, b, (TraceDifference("record", None, "present"),))
         elif b is _MISSING:
+            _require_record(a, "traces")
             yield TraceDivergence(position, a, None, (TraceDifference("record", "present", None),))
         else:
+            _require_record(a, "traces")
+            _require_record(b, "traces")
             differences = compare_step_records(a, b)
             if differences:
                 yield TraceDivergence(position, a, b, differences)
@@ -187,9 +238,28 @@ def first_trace_divergence(
     return next(iter_trace_divergences(left, right), None)
 
 
+def first_session_divergence(
+    left: DebugSession, right: DebugSession, *, max_steps: int
+) -> TraceDivergence | None:
+    """Advance two live sessions in lockstep and stop at the first differing boundary.
+
+    Each session keeps its own bounded history, which is the context before
+    the divergence; nothing else is buffered.  ``max_steps`` is mandatory.
+    """
+    return first_trace_divergence(
+        iter_session_steps(left, max_steps=max_steps),
+        iter_session_steps(right, max_steps=max_steps),
+    )
+
+
 def _append(out: list, path: str, left: TraceValue, right: TraceValue) -> None:
     if left != right:
         out.append(TraceDifference(path, left, right))
+
+
+def _require_record(record: object, what: str) -> None:
+    if type(record) is not StepRecord:
+        raise TypeError(f"{what} must be StepRecord values")
 
 
 def _state_to_dict(state: CPUState) -> dict[str, object]:
@@ -215,6 +285,7 @@ __all__ = [
     "TraceDivergence",
     "TraceValue",
     "compare_step_records",
+    "first_session_divergence",
     "first_trace_divergence",
     "iter_session_steps",
     "iter_trace_divergences",

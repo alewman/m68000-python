@@ -64,8 +64,13 @@ VECTORS = TESTS / "68000_test_vectors" / "m68000" / "v1"
 #: Every test module except the corpus gate, run whole for every mutant.  The
 #: list is read from tests/ when a run starts, and each result records the
 #: modules it ran.
+#: Every test module but the two that need the fetched corpus (the gate runs
+#: per mutant on the files the mutant names; step_clocks is the same lineage
+#: and the gate's clock totals already see a clock mutant) and the benchmark
+#: harness's smoke test, which measures nothing about the core.
+NOT_FAST = ("test_corpus.py", "test_step_clocks.py", "test_benchmark.py")
 FAST_TESTS = tuple(
-    sorted(path.name for path in TESTS.glob("test_*.py") if path.name != "test_corpus.py")
+    sorted(path.name for path in TESTS.glob("test_*.py") if path.name not in NOT_FAST)
 )
 #: Modules added in the coverage and mutation session (docs/coverage.md,
 #: docs/mutation.md).  Kills by these alone are reported separately, to show
@@ -307,24 +312,24 @@ MUTANTS: tuple[Mutant, ...] = (
            'index = sign_extend_16(index)',
            'index = index & 0xFFFF',
            '(d8,An,Xn) zero-extends a word index', ADDRESSING),
-    Mutant('S4', 'sign extension', '_control.py', 'def _brief_index(',
+    Mutant('S4', 'sign extension', '_ea.py', 'def _indexed(',
            'index = sign_extend_16(index)',
            'index = index & 0xFFFF',
            'JMP/JSR/LEA (d8,An,Xn) zero-extends a word index', ('JMP', 'JSR', 'LEA', 'PEA')),
     Mutant('S5', 'sign extension', '_loads.py', 'def _op_movea(',
-           'value = sign_extend_16(value) & 0xFFFFFFFF',
+           'value = word_to_long(value)',
            'value = value & 0xFFFF',
            'MOVEA.W zero-extends', ('MOVEA.w',)),
     Mutant('S6', 'sign extension', '_alu.py', 'def _address_source(',
-           'source = sign_extend_16(source) & 0xFFFFFFFF',
+           'source = word_to_long(source)',
            'source = source & 0xFFFF',
            'ADDA/SUBA/CMPA.W zero-extend', ('ADDA.w', 'SUBA.w', 'CMPA.w')),
     Mutant('S7', 'sign extension', '_loads.py', 'def _op_movem(',
-           'R[index] = sign_extend_16(read(address)) & 0xFFFFFFFF',
+           'R[index] = word_to_long(read(address))',
            'R[index] = read(address)',
            'MOVEM.W loads zero-extended', ('MOVEM.w',)),
     Mutant('S8', 'sign extension', '_ea.py', 'if kind == ABSW:',
-           'return sign_extend_16(self._extension()) & 0xFFFFFFFF',
+           'return word_to_long(self._extension())',
            'return self._extension()',
            '(xxx).W not sign-extended', ADDRESSING),
     Mutant('S9', 'sign extension', '_control.py', 'def _branch_target(',
@@ -336,7 +341,7 @@ MUTANTS: tuple[Mutant, ...] = (
            'self.irc',
            'DBcc displacement unsigned', ('DBcc',)),
     Mutant('S11', 'sign extension', '_loads.py', 'def _op_ext(',
-           'value = sign_extend_16(self.R[register]) & 0xFFFFFFFF',
+           'value = word_to_long(self.R[register])',
            'value = sign_extend_8(self.R[register]) & 0xFFFFFFFF',
            'EXT.L extends the byte', ('EXT.l',)),
     Mutant('S12', 'sign extension', '_loads.py', 'def _op_moveq(',
@@ -378,8 +383,8 @@ MUTANTS: tuple[Mutant, ...] = (
            '(value & 0xFF)',
            'CCR keeps bits 7-5', ('MOVEtoCCR', 'ANDItoCCR', 'ORItoCCR', 'EORItoCCR', 'RTR')),
     Mutant('M8', 'masking', '_core.py', 'def _extension(',
-           'self._pc = (self._pc + 2) & 0xFFFFFFFF',
-           'self._pc = self._pc + 2',
+           'self._pc = (address + 2) & 0xFFFFFFFF',
+           'self._pc = address + 2',
            'the fetch address does not wrap at 32 bits', ('MOVE.l', 'ADD.l')),
     Mutant('M9', 'masking', '_ea.py', 'def _step_size(',
            'return 2 if size == 1 and register == 7 else size',
@@ -673,7 +678,7 @@ MUTANTS: tuple[Mutant, ...] = (
            'the closing prefetch does not hand the next opcode to the decoder',
            ('MOVE.w', 'ADD.w', 'NOP')),
     Mutant('Q2', 'prefetch', '_core.py', 'def _extension(',
-           'self._pc = (self._pc + 2) & 0xFFFFFFFF\n        return value',
+           'self._pc = (address + 2) & 0xFFFFFFFF\n        return value',
            'return value',
            'taking an extension word does not advance the fetch address', ('MOVE.w', 'ADDA.l')),
     Mutant('Q3', 'prefetch', '_core.py', 'def _jump(',
@@ -701,7 +706,7 @@ MUTANTS: tuple[Mutant, ...] = (
            'pass  # expired',
            'DBcc expiry does not skip the displacement word', ('DBcc',)),
     Mutant('Q9', 'prefetch', '_loads.py', 'def _op_movem(',
-           'read(address)  # one word past the last register (T3)',
+           'read(address)  # one word past the last register',
            'pass',
            'MOVEM loads without the extra read', ('MOVEM.w', 'MOVEM.l')),
     Mutant('Q10', 'prefetch', 'cpu.py', 'def set_pc(',
@@ -928,7 +933,7 @@ def child_detect(tree: str, stems: list[str]) -> dict:
 
 def child(tree: str, corpus: list[str], tests: list[str]) -> dict:
     """Run in the child process: import the tree, run the corpus files and tests."""
-    sys.path[:0] = [tree, str(TESTS)]
+    sys.path[:0] = [tree, str(TESTS), str(ROOT)]  # ROOT for examples/, imported by a test
     import m68000_python
 
     loaded = Path(m68000_python.__file__).resolve()

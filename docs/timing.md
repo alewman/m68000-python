@@ -1,11 +1,13 @@
-# Timing: clock counts the core will return
+# Timing: the clock counts the core returns
 
 `step()` in this project's cores returns the documented cycle total of the
 instruction it ran, and the vector gate compares that number against the
 oracle's `length`/`num_cycles` for every case. This page restates the 68000
-tables from the User's Manual so the future handlers can cite a row, then
-says what the prefetch queue does to those numbers, and what an arcade host
-does with them.
+tables from the User's Manual so a handler can cite a row, then says what
+the prefetch queue does to those numbers, and what an arcade host does with
+them. The core counts clocks as it goes (`_core.py`: every bus access adds
+4, every internal step what the microcode spends), so `step()` and, inside a
+bus callback, `step_clocks` give these totals and where each access falls.
 
 Source for every table below: *M68000 8-/16-/32-Bit Microprocessors User's
 Manual* (M68000UM/AD Rev 1, 1993), Section 8, "16-Bit Instruction Execution
@@ -48,7 +50,7 @@ cost: 0 for `Dn`/`An`; 4(0/1) byte/word or 8(0/2) long for `(An)`, `(An)+`
 and `-(An)` (the destination predecrement is *not* charged the 2 idle
 clocks); 8(1/1) / 12(1/2) for `(d16,An)` and `(xxx).W`; 10(1/1) / 14(1/2)
 for `(d8,An,Xn)`; 12(2/1) / 16(2/2) for `(xxx).L`. The manual prints the
-full matrices; both are restated here because handlers will cite cells.
+full matrices; both are restated here because handlers cite cells.
 
 Byte and word (Table 8-2), rows are the source, columns the destination:
 
@@ -85,8 +87,9 @@ Long (Table 8-3):
 | #<data> | 12(3/0) | 12(3/0) | 20(3/2) | 20(3/2) | 20(3/2) | 24(4/2) | 26(4/2) | 24(4/2) | 28(5/2) |
 
 `*` The manual prints `32(5/2)` for `(d16,PC)` to `(xxx).L`; the additive
-rule and the neighbouring cells give `32(6/2)`. Treated as a typographical
-error; the corpus decides.
+rule and the neighbouring cells give `32(6/2)`. A typographical error: the
+core takes 32 clocks with six reads, and the gate's `MOVE.l` file agrees on
+every case (T3).
 
 ## Table 8-4: standard two-operand instructions
 
@@ -142,7 +145,10 @@ overflow 16–18, else 120–156. The corpus records the exact count per case.
 | | L | 8(1/0) | 8(1/0) | 12(1/2)+ |
 
 `*` word only. Note the manual's asymmetry: `ADDQ.W #,An` is 4 and
-`SUBQ.W #,An` is 8; both long forms are 8. The corpus decides.
+`SUBQ.W #,An` is 8; both long forms are 8. The 4 is a misprint: `ADDQ.W
+#,An` takes 8, as the gate's 118 cases and WinUAE's tester core (run, T2:
+a 4-clock difference is outside its ±2) both say ([claims](claims.md),
+"Strong").
 
 ## Table 8-6: single operand
 
@@ -181,8 +187,9 @@ immediate. Memory forms shift by exactly one, word size only.
 | BSET | | 8(1/0)* / 8(1/1)+ | 12(2/0)* / 12(2/1)+ |
 | BTST | | 6(1/0) / 4(1/0)+ | 10(2/0) / 8(2/0)+ |
 
-`*` maximum; the register forms cost 2 fewer clocks when the bit number is
-below 16 (the corpus confirms which).
+`*` maximum; on a register, BCHG and BSET take 6 clocks for a bit number
+below 16 and 8 from 16 up, BCLR 8 and 10, BTST always 6 (`_bits.py`; the
+gate's four `B*.l` files, T3).
 
 ## Table 8-9: conditional and branch
 
@@ -270,9 +277,14 @@ first instruction.
 
 An autovectored interrupt on the real chip takes the VPA path and its
 acknowledge cycle is synchronised to the E clock, so the 44 above becomes
-44–54 depending on phase; an instruction-level core returns a fixed number
-and says so (z80-python's convention). What the MAME core does here is a
-question for the trace run in [mame-oracle](mame-oracle.md).
+49 to 58 depending on the phase of the E clock (CLK/10) when the cycle
+starts. The core models it as MAME 0.285 does (`cpu.py`, `_e_clock_wait`:
+the host's running `clock` gives the phase), and the System 16B lockstep
+agrees at all ten phases ([validation](validation.md), rung 6; T3, MAME's
+rule alone). An address error is 58 clocks from the aborted access, not the
+50 printed here: the aborted cycle and four more precede the frame
+([undocumented-behavior](undocumented-behavior.md), "Clocks of an address
+error"; WinUAE's tester core agrees on all 178,083 judged cases, T2).
 
 ## What prefetch does to these numbers
 
@@ -298,9 +310,11 @@ core must reproduce to match the corpus `length` and transaction list:
   is the only practical source for it.
 
 The corpus `length` is the total for the instruction *including* any
-exception it raised in the same step (the address-error cases carry the
-50-clock frame push); a core that reports the instruction and the exception
-as two boundaries must sum them when comparing.
+exception it raised in the same step (an address-error case carries the
+58 clocks from the aborted access to the handler's first instruction, above);
+a core that reports the instruction and the exception as two boundaries must
+sum them when comparing. This core takes a group 0 exception inside the same
+`step()`, so its total is the corpus's.
 
 ## What arcade hosts need
 

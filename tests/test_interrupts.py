@@ -37,8 +37,11 @@ def test_level_above_the_mask_is_taken_at_the_next_boundary():
     assert sp == 0x8000 - 6
     assert bus.word(sp) == 0x2300  # the SR from before
     assert bus.long(sp + 2) == 0x1002  # the instruction the interrupt came before
-    # UM Table 8-14: 44 clocks, plus the E-clock wait of an autovector.
-    assert 44 + 0 < clocks <= 44 + 19
+    # UM Table 8-14: 44 clocks, plus the E-clock wait of an autovector.  The
+    # acknowledge cycle begins at clock 56 (42 for the reset, 4 for the NOP,
+    # 6 internal and the first push), phase 6 of the E clock: 4 clocks to the
+    # period boundary and MAME's one after VPA (T3; the lockstep agrees).
+    assert clocks == 44 + 5
 
 
 def test_level_at_or_below_the_mask_is_held():

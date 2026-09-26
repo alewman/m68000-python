@@ -1,13 +1,13 @@
-# Start here: the 68000 as this core will model it
+# Start here: the 68000 as this core models it
 
 This page is for someone who has written a Z80 or 6502 interpreter (the two
 sibling cores, `z80-python` and `6502-python`) and has never touched a 68000.
-It gives the key the future source will assume you hold: the register file,
-the status register, how a 16-bit opcode word splits into fields, the twelve
+It gives the key the source assumes you hold: the register file, the status
+register, how a 16-bit opcode word splits into fields, the twelve
 effective-address modes and their extension words, the instruction families,
-the exception model, and the prefetch queue. Nothing here replaces the code
-that does not yet exist; when it does, the code is the reference and this
-page is its map.
+the exception model, and the prefetch queue. The code under
+`src/m68000_python/` is the reference; this page is its map, and each
+section names the module that implements it.
 
 Every fact names its source. The two Motorola documents are:
 
@@ -22,6 +22,8 @@ Both are Motorola/NXP copyright, freely downloadable, not redistributable
 here; the repository keeps none of their text beyond short quotations.
 
 ## Register file
+
+Implemented in `_core.py` (`R`, the sixteen registers; `usp`/`ssp`; `SR`).
 
 | Name | Width | Notes | Source |
 | --- | --- | --- | --- |
@@ -40,6 +42,9 @@ Byte-size operations with `-(A7)` and `(A7)+` move the stack pointer by 2, not
 once.
 
 ## The status register
+
+The bits are constants at the top of `_core.py`; the flag rules of PRM
+Table 3-18 are `_flags.py`, the condition tests of Table 3-19 `_flags.CONDITION`.
 
 ```text
 bit:  15  14  13  12  11  10  9   8   7   6   5   4   3   2   1   0
@@ -89,6 +94,9 @@ NOP-with-decrement that never loops and `DBF` (`DBRA`) always counts.
 
 ## How an opcode word is decoded
 
+`_dispatch.py` holds the map as `RULES`, one line per PRM Section 8 encoding,
+and builds the 65,536-entry table from it once.
+
 Every instruction starts with one 16-bit word, always at an even address.
 Bits 15–12 select a family (PRM Table 8-2, "Operation Code Map"):
 
@@ -129,6 +137,9 @@ in PRM Section 4 (integer) and Section 6 (supervisor) repeat the encoding
 with the allowed EA modes marked.
 
 ## Effective-address modes
+
+`_ea.py`: `EA_KIND` maps the field to a kind once; `_ea_address` and
+`_ea_fetch` compute and read an operand.
 
 The 6-bit EA field is `mode (3 bits) : register (3 bits)`. Mode 7 uses the
 register field to select five more forms. The 68000 has exactly these
@@ -274,6 +285,9 @@ a reset), plus the `to SR` and `MOVE USP` forms above.
 
 ## The exception model
 
+`_core.py` (`_exception`, `_group_zero`, `_interrupt` in `cpu.py`) and
+`_system.py` (the instructions that raise one).
+
 Sources: UM 6.2 (Exception Processing), 6.3 (Processing of Specific
 Exceptions), PRM Appendix B (Table B-1, vector assignments).
 
@@ -374,8 +388,9 @@ device answers with a vector number on D7–D0, or asserts VPA for an
 a **spurious interrupt** (vector 24). A device with an uninitialized vector
 register returns 15. Arcade boards nearly always autovector: Sega System 16
 holds IRQ4 at vblank and the 68000 takes vector 28 at 0x70 (see
-[timing](timing.md), MAME `irq4_line_hold`). The embedding contract will let
-the host answer the acknowledge with a vector, "autovector", or "spurious",
+[timing](timing.md), MAME `irq4_line_hold`). The host sets the level with
+`set_ipl()` and its `acknowledge(level)` callable answers the cycle with a
+vector number, `AUTOVECTOR` or `SPURIOUS` (README, "The embedding contract"),
 mirroring z80-python's IM 2 data-bus callback.
 
 `STOP #imm` loads SR from the immediate (privileged) and halts until an
@@ -403,6 +418,8 @@ of this; it pulses the RESET output for external devices (UM 6.3.1, PRM 6).
 
 ## Prefetch: what a host can observe
 
+`_core.py`: `ir`, `irc`, `_pc`, `_prefetch`, `_extension`.
+
 The 68000 fetches instruction words ahead of execution through a two-word
 queue: when an instruction starts, its opcode word has been decoded from the
 instruction register and the *next* word is already in the second stage
@@ -428,12 +445,13 @@ full for its successor. Three consequences matter to a host:
 
 The 1993 UM does not describe the 68000 queue in a dedicated section (its
 prefetch text at 6.3.9.2 is about the 68010's queue advancing the stacked
-PC by "as many as five words"). The concrete model this project will follow
-is the one the MAME microcoded core implements from the die-transcribed
-microcode and the two corpora record in their `prefetch` and `transactions`
-fields; treat statements here that go beyond the UM as `[unverified]` until
-the core reproduces the corpus. Cycle-level consequences are in
-[timing](timing.md).
+PC by "as many as five words"). The concrete model this core follows is the
+one the MAME microcoded core implements from the die-transcribed microcode
+and the two corpora record in their `prefetch` and `transactions` fields;
+the core reproduces every one of the gate's 317,500 cases on them
+([validation](validation.md)), so a statement here that goes beyond the UM
+rests on that evidence (T3, MAME's lineage) unless a higher tier is named.
+Cycle-level consequences are in [timing](timing.md).
 
 ## Suggested reading order
 
@@ -441,5 +459,8 @@ the core reproduces the corpus. Cycle-level consequences are in
 2. PRM Section 2 (addressing) and Table 3-18/3-19 (flags and conditions).
 3. UM Section 6 (exceptions) end to end; it is 20 pages.
 4. UM Section 8 (timing tables), restated in [timing](timing.md).
-5. [undocumented-behavior](undocumented-behavior.md), then [validation](validation.md).
-6. [handoff-brief](handoff-brief.md), which orders the work.
+5. [undocumented-behavior](undocumented-behavior.md), then [validation](validation.md)
+   and [claims](claims.md).
+6. The code: `_core.py` first (the bus, the queue, exception entry), then
+   `_ea.py`, then the family module a question is about; every handler's
+   docstring names the manual page or corpus file its rule comes from.

@@ -37,7 +37,6 @@ FC_USER_DATA = 1
 FC_USER_PROGRAM = 2
 FC_SUPERVISOR_DATA = 5
 FC_SUPERVISOR_PROGRAM = 6
-FC_CPU_SPACE = 7
 
 # Exception vectors (UM Table 6-2).
 VECTOR_BUS_ERROR = 2
@@ -59,10 +58,11 @@ VECTOR_TRAP_BASE = 32
 AUTOVECTOR = -1
 SPURIOUS = -2
 
-#: Operand sizes in bytes, and their masks and sign bits.
-BYTE, WORD, LONG = 1, 2, 4
-MASK = {1: 0xFF, 2: 0xFFFF, 4: 0xFFFFFFFF}
-MSB = {1: 0x80, 2: 0x8000, 4: 0x80000000}
+#: Operand sizes in bytes (1, 2, 4) index their masks and sign bits: tuples,
+#: because a tuple index is cheaper than a dict lookup on every instruction
+#: (rung A of the speed ladder, docs/validation.md "Speed").
+MASK = (0, 0xFF, 0xFFFF, 0, 0xFFFFFFFF)
+MSB = (0, 0x80, 0x8000, 0, 0x80000000)
 
 ReadFunction = Callable[..., int]
 WriteFunction = Callable[..., None]
@@ -104,6 +104,7 @@ class CoreMixin:
         function_codes: bool,
         tas_write: WriteFunction | None,
         address_error: Callable[[int, bool, int], None] | None,
+        reset_devices: Callable[[], None] | None,
     ) -> None:
         # R[0..7] are D0-D7, R[8..15] are A0-A7; A7 is the active stack
         # pointer and the inactive one waits in _other_sp (PRM 1.3).
@@ -143,6 +144,7 @@ class CoreMixin:
 
         self._acknowledge = acknowledge
         self._address_error_hook = address_error
+        self._reset_devices = reset_devices
         self.function_codes = function_codes
         self.tas_write = tas_write
         self.attach_bus(read_byte, read_word, write_byte, write_word)
@@ -159,15 +161,19 @@ class CoreMixin:
         The originals stay readable as ``read_byte``, ``read_word``,
         ``write_byte`` and ``write_word``.
         """
+        for name, value in (("read_byte", read_byte), ("read_word", read_word),
+                            ("write_byte", write_byte), ("write_word", write_word)):  # fmt: skip
+            if not callable(value):
+                raise TypeError(f"{name} must be callable")
         self.read_byte, self.read_word = read_byte, read_word
         self.write_byte, self.write_word = write_byte, write_word
         tas_write = self.tas_write
         if self.function_codes:
-            # Only a host that asks pays for function codes (docs/handoff-brief.md).
+            # Only a host that asks pays for function codes (README, "The embedding contract").
             self._read_program = lambda address: read_word(address, fc=self._fc(True))
             self._read_data_word = lambda address: read_word(address, fc=self._fc(False))
             self._read_data_byte = lambda address: read_byte(address, fc=self._fc(False))
-            self._read_program_byte_host = lambda address: read_byte(address, fc=self._fc(True))
+            self._read_program_byte = lambda address: read_byte(address, fc=self._fc(True))
             self._write_data_word = lambda address, value: write_word(
                 address, value, fc=self._fc(False)
             )
@@ -178,7 +184,7 @@ class CoreMixin:
             self._read_program = read_word
             self._read_data_word = read_word
             self._read_data_byte = read_byte
-            self._read_program_byte_host = read_byte
+            self._read_program_byte = read_byte
             self._write_data_word = write_word
             self._write_data_byte = write_byte
         if tas_write is None:
@@ -285,7 +291,8 @@ class CoreMixin:
         """Two word writes, low word (at address + 2) first.
 
         The order of -(An) destinations and of read-modify-write results:
-        the microcode works toward the high word (corpus, T3).  An odd
+        the microcode works toward the high word (SST MOVE.l, ADDX.l, SUBX.l,
+        MOVEM.l and the long read-modify-write files; T3).  An odd
         address faults on the first write, at ``address + 2``.
         """
         self._write_word(address + 2, value)
@@ -319,7 +326,7 @@ class CoreMixin:
         if size == 1:
             self._cycles += 4
             try:
-                return self._read_program_byte_host(address & MASK24)
+                return self._read_program_byte(address & MASK24)
             except BusError:
                 raise self._fault(VECTOR_BUS_ERROR, address, False, True) from None
         high = self._read_program_word(address)
@@ -338,11 +345,24 @@ class CoreMixin:
         """
         self._fault_pc = self._pc
 
+    # The three refills below write _read_program_word's body out instead of
+    # calling it: they run once or more per instruction, and a Python frame
+    # is the cost that dominates this core (rung C, docs/validation.md "Speed").
+    # They make no odd-address check because _pc is always even: every path
+    # that sets it either faults first on an odd target (_jump, _jump_idle,
+    # DBcc, JSR read the target's word through _read_program_word before
+    # taking it) or refuses one (set_pc, CPUState), and the refills add 2.
+
     def _extension(self) -> int:
         """Take the extension word waiting in IRC and refill IRC from _pc."""
         value = self.irc
-        self.irc = self._read_program_word(self._pc)
-        self._pc = (self._pc + 2) & 0xFFFFFFFF
+        address = self._pc
+        self._cycles += 4
+        try:
+            self.irc = self._read_program(address & MASK24)
+        except BusError:
+            raise self._fault(VECTOR_BUS_ERROR, address, False, True) from None
+        self._pc = (address + 2) & 0xFFFFFFFF
         return value
 
     def _extension_long(self) -> int:
@@ -355,25 +375,36 @@ class CoreMixin:
         The opcode of the next instruction is then in IR and its first
         extension word in IRC (UM "Prefetch"; corpus ``prefetch`` pair).
         """
-        self._fault_pc = self._pc
-        # IR takes IRC, and the decoder (IRD) takes IR, before the read: an
-        # address error on this read already stacks the next opcode (T3).
+        address = self._fault_pc = self._pc
+        # IR takes IRC, and the decoder (IRD) takes IR, before the read: a
+        # bus error on this read already stacks the next opcode (every
+        # faulting closing prefetch of the corpus, T3, where the fault is an
+        # odd jump target's caught in _jump before the queue moves).
         self.ir = self._opcode = self.irc
-        self.irc = self._read_program_word(self._pc)
-        self._pc = (self._pc + 2) & 0xFFFFFFFF
+        self._cycles += 4
+        try:
+            self.irc = self._read_program(address & MASK24)
+        except BusError:
+            raise self._fault(VECTOR_BUS_ERROR, address, False, True) from None
+        self._pc = (address + 2) & 0xFFFFFFFF
 
     def _prefetch_before_write(self) -> None:
         """The closing prefetch of an instruction that still has a write to do.
 
         IR takes IRC and IRC refills, but the decoder keeps the current
         opcode until the handler hands it over with ``self._opcode =
-        self.ir`` at the step the microcode does (T3): an address error on
+        self.ir`` at the step the microcode does (SST MOVE.l, PEA; T3): an
+        address error on
         a write before that point stacks the old opcode.
         """
-        self._fault_pc = self._pc
+        address = self._fault_pc = self._pc
         self.ir = self.irc
-        self.irc = self._read_program_word(self._pc)
-        self._pc = (self._pc + 2) & 0xFFFFFFFF
+        self._cycles += 4
+        try:
+            self.irc = self._read_program(address & MASK24)
+        except BusError:
+            raise self._fault(VECTOR_BUS_ERROR, address, False, True) from None
+        self._pc = (address + 2) & 0xFFFFFFFF
 
     def _jump(self, target: int) -> None:
         """Refill the queue from ``target``: two program reads (UM Table 8-9).
@@ -469,7 +500,8 @@ class CoreMixin:
         """Address or bus error: abort, stack the seven-word frame (UM Figure 6-7).
 
         The aborted access costs its four clocks and four more; two internal
-        steps of two clocks follow (corpus, T3).  The frame is written in
+        steps of two clocks follow (the corpus's 55,606 address errors, T3;
+        WinUAE run agrees on the clocks).  The frame is written in
         the corpus's order: PC low, SR, PC high, IR, access address low,
         access information, access address high.  A second group 0 fault
         while doing this halts the processor (UM 5.4.4).
@@ -478,7 +510,8 @@ class CoreMixin:
             self._address_error_hook(fault.address & MASK24, fault.write, self._fc(fault.program))
         self._cycles += 4 + 4 + 2 + 2
         # The access information word: bits 15-5 are the undefined part and
-        # carry IR's (corpus, T3; UM Figure 6-7 marks them undefined), R/W is
+        # carry IR's (the corpus's faulting cases, T3; WinUAE run agrees on
+        # every frame it judges; UM Figure 6-7 marks them undefined), R/W is
         # bit 4, I/N bit 3 (set when the access was part of exception
         # processing rather than of an instruction), and the function code.
         information = (
@@ -507,5 +540,6 @@ class CoreMixin:
             # A group 0 fault while processing a group 0 exception: the double
             # bus fault halts the processor until reset (UM 5.4.4, 6.3.9.1).
             # MAME 0.285 takes another address error instead; the corpus has
-            # no such case, and the manual is followed (docs/worklog.md).
+            # no such case, and the manual is followed (docs/claims.md,
+            # "Undecidable here").
             self.halted = True

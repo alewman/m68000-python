@@ -24,6 +24,11 @@ import struct
 from dataclasses import dataclass
 from pathlib import Path
 
+#: The pinned corpus commits.  scripts/fetch_test_vectors.py fetches these
+#: and nothing else; the CI cache keys and docs/validation.md carry copies.
+M68000_REVISION = "64b253116a3de04aaac4346c43680960dc9b67e5"
+H680X0_REVISION = "e0d5ece9670205cc84a0101081837deb446f86a3"
+
 FILE_MAGIC = 0x1A3F5D71
 TEST_MAGIC = 0xABC12367
 NAME_MAGIC = 0x89ABCDEF

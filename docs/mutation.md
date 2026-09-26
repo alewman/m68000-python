@@ -192,13 +192,26 @@ every test that fails for each mutant.
   `clocks == set(range(48, 58)) or len(clocks) > 1`. The range is off by one
   (the core, and MAME per the lockstep, give 49 to 58), so the first half is
   false and the test passes only because the clocks vary at all -- which is
-  why CY10 survived it. The test was left as it is (the rules forbid
-  changing an existing test); a precise one was added beside it, and the
-  question is in docs/worklog.md.
+  why CY10 survived it. A precise one was added beside it, and the old one
+  was corrected to the exact set on 2026-09-21 (7e8237f).
 - **CY14 was killed, and it matters.** CY14 gives `ADDQ.W #,An` the 4 clocks
   UM Table 8-5 prints; the gate killed it (118 cases say 8). The manual and
   the microcode-derived corpus disagree here, and the core follows the
   corpus (and WinUAE, T2); docs/coverage.md lists it.
+
+## The anchors after the polish round (2026-09-25)
+
+Nine mutants were re-pointed at code the polish round moved, with the
+mutation itself unchanged: S4 (the brief-extension index) follows the
+helper into `_ea._indexed`; S5, S6, S7, S8 and S11 mutate `word_to_long`
+where they mutated the spelled-out sign extension; M8 and Q2 mutate the
+fetch address `_extension` now computes as `address`; Q9's comment lost its
+tier marker. The population is the same 176 mutants. The whole run was
+repeated at `1f43e0b` for the 0.1.0 certification record
+([validation](validation.md)) on 2026-09-26: PyPy, `nice`, four at a time,
+phase 1 740 s and the escalation 105 s, `src/` unchanged before and after
+(SHA-256 `873d533cbdb1...`). 174 of 176 killed; N7 and M8 survived, as
+before, and nothing else did.
 
 ## Reproducing
 

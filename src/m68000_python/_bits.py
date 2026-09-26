@@ -5,7 +5,7 @@ The bit number comes from Dn (dynamic) or from the word after the opcode
 number is taken mod 32; on memory it is on a byte, mod 8 (PRM 4, BTST).  Z
 is set if the tested bit was 0; nothing else changes.  On a register the
 changing forms cost 2 clocks more for bits 16-31 (UM Table 8-8 note), and
-BCLR 2 more again (corpus, T3).
+BCLR 2 more again (SST BCLR, T3).
 """
 
 from m68000_python._core import Z
@@ -68,17 +68,33 @@ class BitsMixin:
         return value | bit
 
     def _op_btst(self, opcode: int) -> None:
-        """BTST -- Z <- NOT bit n of the destination (PRM 4-62; UM Table 8-8)."""
+        """BTST -- Z <- NOT bit n of the destination (PRM 4-62; UM Table 8-8).
+
+        Bus order, the 2 idle clocks of the register form, and the PC an address
+        error stacks: SST BTST.
+        """
         self._bit_operation(opcode, TEST)
 
     def _op_bchg(self, opcode: int) -> None:
-        """BCHG -- Z <- NOT bit n, then invert bit n (PRM 4-28; UM Table 8-8)."""
+        """BCHG -- Z <- NOT bit n, then invert bit n (PRM 4-28; UM Table 8-8).
+
+        On a register 6 clocks, 8 for bits 16-31 (UM Table 8-8's note); bus
+        order and the PC an address error stacks: SST BCHG.
+        """
         self._bit_operation(opcode, CHANGE)
 
     def _op_bclr(self, opcode: int) -> None:
-        """BCLR -- Z <- NOT bit n, then clear bit n (PRM 4-31; UM Table 8-8)."""
+        """BCLR -- Z <- NOT bit n, then clear bit n (PRM 4-31; UM Table 8-8).
+
+        On a register 8 clocks, 10 for bits 16-31, 2 more than BCHG and BSET at
+        every bit; bus order and the PC an address error stacks: SST BCLR.
+        """
         self._bit_operation(opcode, CLEAR)
 
     def _op_bset(self, opcode: int) -> None:
-        """BSET -- Z <- NOT bit n, then set bit n (PRM 4-57; UM Table 8-8)."""
+        """BSET -- Z <- NOT bit n, then set bit n (PRM 4-57; UM Table 8-8).
+
+        On a register 6 clocks, 8 for bits 16-31; bus order and the PC an
+        address error stacks: SST BSET.
+        """
         self._bit_operation(opcode, SET)

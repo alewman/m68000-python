@@ -190,7 +190,7 @@ WinUAE's answer is T2.
 
 | Question | Core | WinUAE (lineage UAE) | Musashi | Other lineages | What can be claimed |
 | --- | --- | --- | --- | --- | --- |
-| **DBcc to an odd target** (DBF D0,*+$13): stacked PC | instr + 4 ($1004), = gate (MAME) | target + 2 ($1015); Dn not decremented (= core); in scope (changelog 4.3.0 "DBcc and odd offset ... Address error stacked PC was wrong", fixed on hardware; AESRC) | fault taken at the next fetch: no frame in one step (out of model) | CLK: the odd target | **Conflict** between T2 (WinUAE, run) and the gate (T3).  Core left on the gate; Aubrey's decision (worklog). |
+| **DBcc to an odd target** (DBF D0,*+$13): stacked PC | instr + 4 ($1004), = gate (MAME) | target + 2 ($1015); Dn not decremented (= core); in scope (changelog 4.3.0 "DBcc and odd offset ... Address error stacked PC was wrong", fixed on hardware; AESRC) | fault taken at the next fetch: no frame in one step (out of model) | CLK: the odd target | **Conflict** between T2 (WinUAE, run) and the gate (T3).  Core left on the gate; **contested** ([claims](claims.md)). |
 | **CHK timing, 8 or 10** (Dn = $8000, bound $7FFF; and 2 more overflow cases) | 38 total (8 internal) | 40 (6 + 34) | 40 | CLK: 10 (the 605 680x0 cases, below) | Undecided.  WinUAE, CLK and Musashi say 10, MAME 8; the difference is 2 clocks, inside cputest's ±2, so no T2 claim either way.  Settle: a logic-analyser capture of this CHK on a 68000. |
 | **Double bus fault** (address error with SSP odd; or with vector 3 odd) | halts (both) | tester: out of scope (skips halting tests; this driver reports `oddssp` / `doublefault`); WinUAE's emulator, read (`newcpu.cpp`, `Exception_ce000`): halts for both; changelog 4.4.0 "Odd bus error or address error vector will halt the CPU" | SSP odd: halts (run); vector 3 odd: fault at the next fetch, not run | MAME 0.285: another address error | T3 only (a reading and a hand-written core, against MAME), plus the manual (UM 5.4.4).  No change.  Settle: hardware (an odd SSP, then a fault). |
 | **Divide-by-zero flags** (DIVU/DIVS over 5 dividends × CCR 0/1F) | DIVS: Z, N=V=C=0; DIVU: N from bit 31, Z from the upper word; X kept | **identical on all 20**; in scope (BASIC with undefined flags checked; changelog 4.3.0 "100% correct") | leaves all flags | CLK: 1 DIVU case, = WinUAE | **T2 by running.**  Pinned (`tests/test_referee_evidence.py`); mutant D10 is now killed. |
@@ -207,8 +207,8 @@ not moved; gate: moved; 4,330 gate cases, 14,148 680x0 cases where core and
 CLK both move it; CMPM.L differs too, 115 gate cases; changelog 4.3.0 "An contents are updated (or not updated)
 if -(an) or (an)+"), and **I/N of a MOVE.W to -(An) whose write faults when
 the next word is illegal or privileged** (WinUAE 1, gate 0; 35 gate cases;
-changelog 4.3.0 "CPU bug found and emulated").  Both are open questions for
-Aubrey (docs/worklog.md).
+changelog 4.3.0 "CPU bug found and emulated").  Both are **contested**
+([claims](claims.md), decided 2026-09-21: the core stays on the gate).
 
 ## The 680x0 disagreement table, re-derived by running WinUAE
 

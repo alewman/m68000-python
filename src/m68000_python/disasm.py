@@ -14,7 +14,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from m68000_python._dispatch import NAMES
-from m68000_python._ea import EA_KIND
 from m68000_python._flags import CONDITION_NAMES
 
 WordReader = Callable[[int], int]
@@ -240,8 +239,10 @@ def _decode(name: str, opcode: int, reader: _Reader) -> tuple[str, tuple[str, ..
         return "move", (f"A{ry}", "USP")
     if name == "stop":
         return "stop", ("#" + _signed_hex_16(reader.word()),)
-    if name in ("reset", "nop", "rte", "rts", "trapv", "rtr", "illegal"):
+    if name in ("reset", "nop", "rte", "rts", "trapv", "rtr"):
         return name, ()
+    if name == "illegal" and opcode == 0x4AFC:
+        return "illegal", ()  # the one word that is ILLEGAL by name (PRM 4-107)
     if name == "chk":
         return "chk.w", (reader.ea(ea, 1), f"D{rx}")
     if name == "lea":
@@ -344,7 +345,6 @@ def disassemble_range(read_word: WordReader, start: int, end: int) -> list[Instr
 
 
 __all__ = [
-    "EA_KIND",
     "Instruction",
     "WordReader",
     "disassemble",

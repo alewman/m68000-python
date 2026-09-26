@@ -32,16 +32,17 @@ from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 DESTINATION = ROOT / "tests" / "68000_test_vectors"
+sys.path.insert(0, str(ROOT / "tests"))
+
+from corpus import H680X0_REVISION, M68000_REVISION  # noqa: E402  (the pins live there)
 
 # Primary corpus: MIT, MAME microcoded-core derived. 127 files, 137,928,157 bytes.
 M68000_REPOSITORY = "https://github.com/SingleStepTests/m68000"
-M68000_REVISION = "64b253116a3de04aaac4346c43680960dc9b67e5"
 M68000_SOURCE_DIRECTORY = "v1"
 
 # Secondary corpus: Tom Harte's, no LICENSE file (issue #1 open since 2024-06).
 # Fetched only on request, and only as a detector. 125 files, 202,594,760 bytes.
 H680X0_REPOSITORY = "https://github.com/SingleStepTests/680x0"
-H680X0_REVISION = "e0d5ece9670205cc84a0101081837deb446f86a3"
 H680X0_SOURCE_DIRECTORY = "68000/v1"
 
 # Magic numbers of the m68000 .json.bin container, from the repository's decode.py.

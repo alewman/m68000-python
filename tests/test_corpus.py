@@ -13,11 +13,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from corpus import read_m68000
+from corpus import M68000_REVISION, read_m68000
 from harness import run_case
 
 VECTORS = Path(__file__).resolve().parent / "68000_test_vectors" / "m68000" / "v1"
-REVISION = "64b253116a3de04aaac4346c43680960dc9b67e5"
+REVISION = M68000_REVISION
 
 #: Every file of the pinned corpus: 127 files of 2,500 cases (rung 3).  No
 #: case is excluded (docs/validation.md).

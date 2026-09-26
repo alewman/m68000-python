@@ -6,7 +6,6 @@ these numbers" in docs/timing.md).  A target at an odd address faults on the
 first of those reads.
 """
 
-from m68000_python._core import MASK
 from m68000_python._ea import (
     ABSL,
     ABSW,
@@ -19,6 +18,7 @@ from m68000_python._ea import (
     PCINDEX,
     sign_extend_8,
     sign_extend_16,
+    word_to_long,
 )
 from m68000_python._flags import CONDITION
 
@@ -63,22 +63,30 @@ class ControlMixin:
         self._prefetch()
 
     def _op_bsr(self, opcode: int) -> None:
-        """BSR -- push the return address, then branch (PRM 4-59; UM Table 8-9: 18 clocks)."""
+        """BSR -- push the return address, then branch (PRM 4-59; UM Table 8-9: 18 clocks).
+
+        A fault on the refill stacks the target itself: SST BSR.
+        """
         target = self._branch_target(opcode)
         # The return address is past the displacement word, when there is one.
         returns = self._pc if not opcode & 0xFF else self._pc - 2
         self._cycles += 2
         self._push_long(returns)
-        self._fault_pc = target  # a fault on the refill stacks the target (corpus, T3)
+        self._fault_pc = target  # a fault on the refill stacks the target
         self._jump(target)
 
     # -- DBcc and Scc (PRM 4-91, 4-173) ---------------------------------------
 
     def _op_dbcc(self, opcode: int) -> None:
-        """DBcc -- if the condition is false, decrement Dn.w and branch unless it is -1 (PRM 4-91).
+        """DBcc -- if cc is false, decrement Dn.w; branch unless it is -1 (PRM 4-91; UM Table 8-9).
 
         UM Table 8-9: condition true 12 clocks; false and branching 10; false
         with the count expired 14.
+
+        The branch target's word is read before Dn is written, so an odd target
+        faults with Dn unchanged and stacks the instruction's address + 4:
+        SST DBcc.  WinUAE run stacks the target + 2 instead: contested, the core
+        follows the gate (docs/claims.md).
         """
         register = opcode & 7
         if CONDITION[(opcode >> 8) & 0xF][self.SR & 0xF]:
@@ -88,7 +96,7 @@ class ControlMixin:
             return
         # Condition false: the word at the branch target is read whether or
         # not the count expires, and Dn is written only after that read, so
-        # an odd target faults with Dn unchanged (corpus, T3).
+        # an odd target faults with Dn unchanged.
         self._cycles += 2
         target = (self._pc - 2 + sign_extend_16(self.irc)) & 0xFFFFFFFF
         self._commit_pc()
@@ -102,10 +110,11 @@ class ControlMixin:
         self._prefetch()
 
     def _op_scc(self, opcode: int) -> None:
-        """Scc -- set a byte to $FF if the condition holds, else $00 (PRM 4-173).
+        """Scc -- set a byte to $FF if the condition holds, else $00 (PRM 4-173; UM Table 8-6).
 
         UM Table 8-6: register 4 clocks false, 6 true; memory 8 plus the EA,
-        the operand read before it is written.
+        the operand read before it is written.  The read, the refill between it
+        and the write, and the PC an address error stacks: SST Scc.
         """
         value = 0xFF if CONDITION[(opcode >> 8) & 0xF][self.SR & 0xF] else 0
         kind = EA_KIND[opcode & 0x3F]
@@ -136,25 +145,17 @@ class ControlMixin:
         if kind == DISP:
             return (R[8 + register] + sign_extend_16(self.irc)) & 0xFFFFFFFF
         if kind == INDEX:
-            return self._brief_index(R[8 + register])
+            return self._indexed(R[8 + register], self.irc)
         if kind == ABSW:
-            return sign_extend_16(self.irc) & 0xFFFFFFFF
+            return word_to_long(self.irc)
         if kind == ABSL:
             high = self._extension()
             return ((high << 16) | self.irc) & 0xFFFFFFFF
         if kind == PCDISP:
             return (self._pc - 2 + sign_extend_16(self.irc)) & 0xFFFFFFFF
         if kind == PCINDEX:
-            return self._brief_index(self._pc - 2)
+            return self._indexed(self._pc - 2, self.irc)
         raise AssertionError(f"not a control kind: {kind}")
-
-    def _brief_index(self, base: int) -> int:
-        """Apply the brief extension word waiting in IRC without consuming it."""
-        extension = self.irc
-        index = self.R[extension >> 12]
-        if not extension & 0x0800:
-            index = sign_extend_16(index)
-        return (base + index + sign_extend_8(extension)) & 0xFFFFFFFF
 
     def _op_jmp(self, opcode: int) -> None:
         """JMP -- PC <- effective address (PRM 4-108; UM Table 8-10)."""
@@ -167,7 +168,13 @@ class ControlMixin:
         self._jump(target)
 
     def _op_jsr(self, opcode: int) -> None:
-        """JSR -- push the return address, PC <- effective address (PRM 4-109; UM Table 8-10)."""
+        """JSR -- push the return address, PC <- effective address (PRM 4-109; UM Table 8-10).
+
+        The target's first word is read before the push, so an odd target faults
+        with nothing pushed: SST JSR.  Through (d16,An), (d8,An,Xn), (d16,PC) and
+        (d8,PC,Xn) WinUAE run stacks 2 less than the gate: contested, the core
+        follows the gate (docs/claims.md).
+        """
         kind = EA_KIND[opcode & 0x3F]
         target = self._control_address(kind, opcode & 7)
         # The return address is past the extension words.
@@ -179,7 +186,7 @@ class ControlMixin:
         if kind != IND:
             self._commit_pc()
         # The target's first word is read before the push, so an odd target
-        # faults with nothing pushed (corpus, T3).
+        # faults with nothing pushed.
         target &= 0xFFFFFFFF
         self.irc = self._read_program_word(target)
         self._pc = (target + 2) & 0xFFFFFFFF
@@ -199,6 +206,3 @@ class ControlMixin:
     def _op_nop(self, opcode: int) -> None:
         """NOP -- no operation (PRM 4-147; UM Table 8-12: 4 clocks, the prefetch)."""
         self._prefetch()
-
-
-__all__ = ["MASK"]

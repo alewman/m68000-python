@@ -2,11 +2,11 @@
 
 ``CommandDebugger(session).execute("step 3")`` returns the lines a terminal
 would print; ``interact(stdin, stdout)`` is the prompt loop that
-``python -m m68000_python`` runs.  Numbers are hexadecimal, with an optional
-``$`` or ``0x``; counts may be written in decimal with a leading ``#``.
+``python -m m68000_python`` runs.  Numbers are decimal, or hexadecimal with a
+``$`` or ``0x`` prefix, the rule of every console in this family.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TextIO
 
 from m68000_python.debug import BoundaryKind, DebugSession, StepRecord
@@ -33,24 +33,34 @@ class CommandError(Exception):
     """A command that could not be run; the message says why."""
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class CommandResult:
-    lines: list[str] = field(default_factory=list)
+    """What one command printed, and whether it asked to leave."""
+
+    lines: tuple[str, ...] = ()
     quit: bool = False
+
+    def __post_init__(self) -> None:
+        if type(self.lines) is not tuple or not all(type(line) is str for line in self.lines):
+            raise ValueError("lines must be a tuple of strings")
+        if type(self.quit) is not bool:
+            raise ValueError("quit must be a bool")
 
 
 def parse_number(text: str, name: str = "number", *, maximum: int = 0xFFFFFFFF) -> int:
-    """Parse ``$1F``, ``0x1F``, ``1F`` (hex) or ``#31`` (decimal)."""
+    """Parse a decimal number, or a hexadecimal one written ``$1F`` or ``0x1F``."""
     body = text.strip()
     try:
-        if body.startswith("#"):
-            value = int(body[1:], 10)
+        if body.startswith("$"):
+            value = int(body[1:], 16)
+        elif body[:2].lower() == "0x":
+            value = int(body[2:], 16)
         else:
-            value = int(body.removeprefix("$").removeprefix("0x").removeprefix("0X"), 16)
+            value = int(body, 10)
     except ValueError:
         raise CommandError(f"{name}: {text!r} is not a number") from None
     if not 0 <= value <= maximum:
-        raise CommandError(f"{name}: {text} is out of range")
+        raise CommandError(f"{name}: {text} is out of range 0..{maximum:#x}")
     return value
 
 
@@ -78,6 +88,9 @@ class CommandDebugger:
         if state.halted:
             extra += " HALTED"
         return [d[:47], d[48:], a[:47], a[48:], status, extra]
+
+    def _result(self, lines: list[str]) -> CommandResult:
+        return CommandResult(tuple(lines))
 
     def _describe(self, record: StepRecord) -> str:
         if record.kind is BoundaryKind.INSTRUCTION:
@@ -126,14 +139,18 @@ class CommandDebugger:
         if command in ("quit", "q", "exit"):
             return CommandResult(quit=True)
         if command == "help":
-            return CommandResult(HELP.splitlines())
+            return self._result(HELP.splitlines())
         if command in ("registers", "r", "regs"):
-            return CommandResult(self.registers())
+            return self._result(self.registers())
         if command in ("step", "s"):
             count = parse_number(arguments[0], "count") if arguments else 1
-            return CommandResult([self._describe(session.step()) for _ in range(count)])
+            if count == 0:
+                raise CommandError("count must be positive")
+            return self._result([self._describe(session.step()) for _ in range(count)])
         if command in ("run", "c", "continue"):
             count = parse_number(arguments[0], "count") if arguments else 1_000_000
+            if count == 0:
+                raise CommandError("count must be positive")
             result = session.run(max_steps=count)
             lines = [
                 f"{result.reason.value} after {result.steps:,} steps, {result.cycles:,} clocks"
@@ -141,12 +158,12 @@ class CommandDebugger:
             lines += [
                 f"  {kind} {address:06X} = {value:X}" for kind, address, value, _ in result.hits
             ]
-            return CommandResult(lines + self.registers())
+            return self._result(lines + self.registers())
         if command in ("break", "b"):
             session.add_breakpoint(
                 parse_number(self._one(arguments, "address"), "address", maximum=0xFFFFFF)
             )
-            return CommandResult(
+            return self._result(
                 [f"breakpoints: {', '.join(f'{a:06X}' for a in sorted(session.breakpoints))}"]
             )
         if command == "delete":
@@ -173,23 +190,23 @@ class CommandDebugger:
         if command in ("disassemble", "d", "dis"):
             address = parse_number(arguments[0], "address", maximum=0xFFFFFF) if arguments else None
             count = parse_number(arguments[1], "count") if len(arguments) > 1 else 8
-            return CommandResult(self.disassemble(address, count))
+            return self._result(self.disassemble(address, count))
         if command in ("memory", "m"):
             address = parse_number(self._one(arguments[:1], "address"), "address", maximum=0xFFFFFF)
-            count = parse_number(arguments[1], "count") if len(arguments) > 1 else 64
-            return CommandResult(self.memory(address, count))
+            count = parse_number(arguments[1], "count", maximum=4096) if len(arguments) > 1 else 64
+            return self._result(self.memory(address, count))
         if command == "set":
             if len(arguments) != 2:
                 raise CommandError("set needs a register and a value")
             self._set(arguments[0].lower(), parse_number(arguments[1], arguments[0]))
-            return CommandResult(self.registers())
+            return self._result(self.registers())
         if command == "ipl":
             session.cpu.set_ipl(parse_number(self._one(arguments, "level"), "level", maximum=7))
             return CommandResult()
         if command == "history":
             count = parse_number(arguments[0], "count") if arguments else 10
-            records = list(session.iter_history())[-count:]
-            return CommandResult([self._describe(record) for record in records])
+            records = list(session.iter_history())[-count:] if count else []
+            return self._result([self._describe(record) for record in records])
         raise CommandError(f"unknown command {command!r} (try help)")
 
     @staticmethod
@@ -207,6 +224,8 @@ class CommandDebugger:
         elif name == "ssp":
             cpu.ssp = value
         elif name == "sr":
+            if value > 0xFFFF:
+                raise CommandError("sr is 16 bits")
             cpu.set_sr(value)
         elif name == "pc":
             cpu.set_pc(value)

@@ -127,7 +127,7 @@ def test_autovector_clocks_at_each_e_clock_phase():
     the System 16B lockstep agrees with MAME at all ten phases.  This is T3
     evidence, not the manual's.  Mutant CY10 moved the boundary and survived:
     the existing phase test (tests/test_interrupts.py) accepts any set of
-    clocks with more than one member (docs/worklog.md).
+    clocks with more than one member (docs/history/worklog.md).
     """
     expected = {0: 55, 1: 54, 2: 53, 3: 52, 4: 51, 5: 50, 6: 49, 7: 58, 8: 57, 9: 56}
     for phase, clocks in expected.items():

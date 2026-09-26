@@ -4,10 +4,9 @@ PRM Table 3-2.  MOVE's destination has its own sequence, not the source's:
 no extension word is taken from the queue before the source operand is read,
 ``-(An)`` costs no internal clocks and is written after the closing prefetch,
 and ``(xxx).L`` writes between its two extension-word refills (UM Tables 8-2
-and 8-3; the order is the corpus's, T3).
+and 8-3; the order is the corpus's: SST MOVE.b/.w/.l, T3).
 """
 
-from m68000_python._core import MASK, MSB
 from m68000_python._ea import (
     ABSL,
     ABSW,
@@ -24,6 +23,7 @@ from m68000_python._ea import (
     PREDEC,
     sign_extend_8,
     sign_extend_16,
+    word_to_long,
 )
 
 #: MOVE's size field, bits 13-12 (PRM 4, MOVE): 01 byte, 11 word, 10 long.
@@ -31,10 +31,18 @@ MOVE_SIZE = {1: 1, 3: 2, 2: 4}
 
 
 class LoadsMixin:
-    """Private data-movement implementation."""
+    """Private data-movement implementation: MOVE and its kin, MOVEM, MOVEP, LEA,
+    PEA, LINK, UNLK, EXG, SWAP and EXT."""
 
     def _op_move(self, opcode: int) -> None:
-        """MOVE -- destination <- source; N Z set, V C cleared (PRM 4-116; UM Tables 8-2, 8-3)."""
+        """MOVE -- destination <- source; N Z set, V C cleared (PRM 4-116; UM Tables 8-2, 8-3).
+
+        The destination sequence (the module docstring), which flags a faulting
+        long write has set (``_move_long_to``), when (An)+ and -(An) move, and the
+        PC an address error stacks: SST MOVE.b/.w/.l, 60% of whose cases fault.
+        WinUAE run agrees except that it leaves An alone when a word (An)+ faults:
+        contested, the core follows the gate (docs/claims.md).
+        """
         size = MOVE_SIZE[opcode >> 12]
         source = EA_KIND[opcode & 0x3F]
         value = self._ea_read(source, opcode & 7, size)
@@ -54,7 +62,7 @@ class LoadsMixin:
             self._flags_logic(value, size)
             self._commit_pc()
             self._write(size, address, value)
-            if kind == POSTINC:  # after the write: a faulting write leaves An alone (T3)
+            if kind == POSTINC:  # after the write: a faulting write leaves An alone
                 R[8 + register] = (address + self._step_size(register, size)) & 0xFFFFFFFF
             self._prefetch()
             return
@@ -74,14 +82,14 @@ class LoadsMixin:
             address = self._index(R[8 + register])
         elif kind == ABSW:
             self._commit_pc()
-            address = sign_extend_16(self._extension()) & 0xFFFFFFFF
+            address = word_to_long(self._extension())
         elif source in (DN, AN, IMM):
-            # (xxx).L from a register or immediate: both refills, then the write (T3).
+            # (xxx).L from a register or immediate: both refills, then the write.
             high = self._extension()
             self._commit_pc()
             address = ((high << 16) | self._extension()) & 0xFFFFFFFF
         else:
-            # (xxx).L from memory: the write comes between the two refills (T3).
+            # (xxx).L from memory: the write comes between the two refills.
             self._commit_pc()
             high = self._extension()
             address = ((high << 16) | self.irc) & 0xFFFFFFFF
@@ -100,7 +108,7 @@ class LoadsMixin:
         The long is written as two words and its flags are set as two
         halves, low word then high word (_flags.py), interleaved with the
         writes in an order that depends on where the value came from: the
-        stacked SR of an address error on the first write shows it (T3).
+        stacked SR of an address error on the first write shows it (SST MOVE.l).
         """
         R = self.R
         high, low = value >> 16, value & 0xFFFF
@@ -155,13 +163,13 @@ class LoadsMixin:
             return
         if kind == ABSW:
             self._commit_pc()
-            address = sign_extend_16(self._extension()) & 0xFFFFFFFF
+            address = word_to_long(self._extension())
         elif from_register:
             high_address = self._extension()
             self._commit_pc()
             address = ((high_address << 16) | self._extension()) & 0xFFFFFFFF
         else:
-            # (xxx).L from memory: the writes come between the two refills (T3).
+            # (xxx).L from memory: the writes come between the two refills.
             self._commit_pc()
             high_address = self._extension()
             address = ((high_address << 16) | self.irc) & 0xFFFFFFFF
@@ -178,27 +186,23 @@ class LoadsMixin:
         self._prefetch()
 
     def _op_movea(self, opcode: int) -> None:
-        """MOVEA -- An <- source, a word sign-extended; flags unchanged (PRM 4-119)."""
+        """MOVEA -- An <- source, a word sign-extended; no flags (PRM 4-119; UM Tables 8-2, 8-3).
+
+        Source bus order and the PC an address error stacks: SST MOVEA.w/.l.
+        """
         size = 2 if opcode >> 12 == 3 else 4
         value = self._ea_read(EA_KIND[opcode & 0x3F], opcode & 7, size)
         if size == 2:
-            value = sign_extend_16(value) & 0xFFFFFFFF
+            value = word_to_long(value)
         self.R[8 + ((opcode >> 9) & 7)] = value
         self._prefetch()
 
     def _op_moveq(self, opcode: int) -> None:
-        """MOVEQ -- Dn <- sign-extended 8-bit data; N Z set, V C cleared (PRM 4-134; 4 clocks)."""
+        """MOVEQ -- Dn <- sign-extended byte; N Z, V C cleared (PRM 4-134; UM Table 8-5)."""
         value = sign_extend_8(opcode) & 0xFFFFFFFF
         self._flags_logic(value, 4)
         self.R[(opcode >> 9) & 7] = value
         self._prefetch()
-
-
-__all__ = ["AN", "MASK", "MSB"]
-
-
-class MultipleMixin:
-    """Private MOVEM, MOVEP, LEA, PEA, LINK, UNLK, EXG, SWAP, EXT implementation."""
 
     # -- MOVEM (PRM 4-128; UM Table 8-10) ---------------------------------------
 
@@ -209,10 +213,14 @@ class MultipleMixin:
         for -(An), where the order is reversed so that the registers still
         land in memory D0 lowest (PRM 4, MOVEM).  Memory-to-register reads
         one word past the last register (the extra read of UM Table 8-10's
-        ``3+n``; corpus, T3); word loads are sign-extended into the whole
-        register.  With -(An) the 68000 stores An's initial value if An is
-        in the list; with (An)+ the loaded value is replaced by the final
-        address (PRM 4, MOVEM).
+        ``3+n``); word loads are sign-extended into the whole register.  With
+        -(An) the 68000 stores An's initial value if An is in the list; with
+        (An)+ the loaded value is replaced by the final address (PRM 4, MOVEM).
+
+        The extra read, the -(An) form's low-word-first longs, and the PC an
+        address error stacks: SST MOVEM.w/.l.  For (d8,An,Xn) and (d8,PC,Xn) at
+        an odd address WinUAE run stacks 4 less: contested, the core follows the
+        gate (docs/claims.md).
         """
         size = 4 if opcode & 0x40 else 2
         kind = EA_KIND[opcode & 0x3F]
@@ -230,9 +238,9 @@ class MultipleMixin:
                         high = read(address)
                         R[index] = (high << 16) | read(address + 2)
                     else:
-                        R[index] = sign_extend_16(read(address)) & 0xFFFFFFFF
+                        R[index] = word_to_long(read(address))
                     address = (address + size) & 0xFFFFFFFF
-            read(address)  # one word past the last register (T3)
+            read(address)  # one word past the last register
             if kind == POSTINC:
                 R[8 + register] = address
             self._prefetch()
@@ -265,10 +273,11 @@ class MultipleMixin:
     # -- MOVEP (PRM 4-133; UM Table 8-13) --------------------------------------
 
     def _op_movep(self, opcode: int) -> None:
-        """MOVEP -- move Dn to or from alternate bytes at (d16,Ay) (PRM 4-133).
+        """MOVEP -- move Dn to or from alternate bytes at (d16,Ay) (PRM 4-133; UM Table 8-13).
 
         Byte accesses, high-order byte first, so never an address error at an
-        odd address (docs/undocumented-behavior.md, "Odd addresses").
+        odd address (docs/undocumented-behavior.md, "Odd addresses"); the order
+        is SST MOVEP.w/.l's.
         """
         dn = (opcode >> 9) & 7
         address = (self.R[8 + (opcode & 7)] + sign_extend_16(self._extension())) & 0xFFFFFFFF
@@ -289,7 +298,10 @@ class MultipleMixin:
     # -- effective addresses as values (PRM 4-110, 4-159) ----------------------
 
     def _op_lea(self, opcode: int) -> None:
-        """LEA -- An <- effective address (PRM 4-110; UM Table 8-10)."""
+        """LEA -- An <- effective address (PRM 4-110; UM Table 8-10).
+
+        The extension words' refills and the PC they commit: SST LEA.
+        """
         kind = EA_KIND[opcode & 0x3F]
         address = self._control_ea(kind, opcode & 7)
         self.R[8 + ((opcode >> 9) & 7)] = address
@@ -304,7 +316,12 @@ class MultipleMixin:
         return self._ea_address(kind, register, 4)
 
     def _op_pea(self, opcode: int) -> None:
-        """PEA -- push the effective address (PRM 4-159; UM Table 8-10)."""
+        """PEA -- push the effective address (PRM 4-159; UM Table 8-10).
+
+        Absolute forms push before the closing prefetch, the others after it
+        with the decoder still holding PEA; the PC an address error stacks:
+        SST PEA.
+        """
         kind = EA_KIND[opcode & 0x3F]
         address = self._control_ea(kind, opcode & 7)
         if kind in (INDEX, PCINDEX):
@@ -320,10 +337,14 @@ class MultipleMixin:
     # -- stack frames (PRM 4-111, 4-194) -----------------------------------------
 
     def _op_link(self, opcode: int) -> None:
-        """LINK -- push An, An <- SP, SP <- SP + d16 (PRM 4-111; UM Table 8-12: 16 clocks)."""
+        """LINK -- push An, An <- SP, SP <- SP + d16 (PRM 4-111; UM Table 8-12: 16 clocks).
+
+        LINK A7 pushes A7's value from before the push: SST LINK, and WinUAE
+        run (its 4.3.0 fix against hardware; docs/claims.md, "Strong").
+        """
         an = 8 + (opcode & 7)
         displacement = sign_extend_16(self._extension())
-        value = self.R[an]  # LINK A7 pushes A7 as it was before the push (T3)
+        value = self.R[an]  # LINK A7 pushes A7 as it was before the push
         sp = (self.R[15] - 4) & 0xFFFFFFFF
         self.R[an] = sp
         self._write_long(sp, value)
@@ -331,11 +352,14 @@ class MultipleMixin:
         self._prefetch()
 
     def _op_unlk(self, opcode: int) -> None:
-        """UNLK -- SP <- An, An <- (SP)+ (PRM 4-194; UM Table 8-12: 12 clocks)."""
+        """UNLK -- SP <- An, An <- (SP)+ (PRM 4-194; UM Table 8-12: 12 clocks).
+
+        SP moves only once both words are in, so a fault leaves it: SST UNLINK.
+        """
         an = 8 + (opcode & 7)
         address = self.R[an]
         self._commit_pc()
-        value = self._read_long(address)  # SP moves only once both words are in (T3)
+        value = self._read_long(address)  # SP moves only once both words are in
         self.R[15] = (address + 4) & 0xFFFFFFFF
         self.R[an] = value
         self._prefetch()
@@ -359,7 +383,7 @@ class MultipleMixin:
         self._cycles += 2
 
     def _op_swap(self, opcode: int) -> None:
-        """SWAP -- exchange the halves of Dn; N Z of the long, V C cleared (PRM 4-187)."""
+        """SWAP -- swap the halves of Dn; N Z of the long, V C clear (PRM 4-187; UM Table 8-12)."""
         register = opcode & 7
         value = self.R[register]
         value = ((value << 16) | (value >> 16)) & 0xFFFFFFFF
@@ -368,10 +392,10 @@ class MultipleMixin:
         self._prefetch()
 
     def _op_ext(self, opcode: int) -> None:
-        """EXT -- sign-extend byte to word (EXT.W) or word to long (EXT.L) (PRM 4-106)."""
+        """EXT -- sign-extend Dn's byte (EXT.W) or word (EXT.L) (PRM 4-106; UM Table 8-12)."""
         register = opcode & 7
         if opcode & 0x40:
-            value = sign_extend_16(self.R[register]) & 0xFFFFFFFF
+            value = word_to_long(self.R[register])
             self._flags_logic(value, 4)
             self.R[register] = value
         else:

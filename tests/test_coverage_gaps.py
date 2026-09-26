@@ -43,9 +43,11 @@ def with_vectors(**handlers):
     """A CPU at $1000 with every exception vector pointing at its own handler.
 
     Vector n lands at ``$2000 + 16n`` unless ``vN=address`` names another, so a
-    test can tell which exception was taken by where the PC ends up.
+    test can tell which exception was taken by where the PC ends up.  Other
+    keywords go to the constructor.
     """
-    cpu, bus = make([NOP] * 16)
+    options = {name: value for name, value in handlers.items() if not name.startswith("v")}
+    cpu, bus = make([NOP] * 16, **options)
     for vector in range(256):
         bus.set_long(vector * 4, handlers.get(f"v{vector}", HANDLER + 16 * vector))
     bus.load(HANDLER, [NOP] * 0x800)
@@ -708,7 +710,7 @@ def test_an_address_error_inside_exception_processing_sets_i_slash_n_for_group_1
     WinUAE's CPU-tester core (T2 by running, inside its ODDEXC scope) and MAME
     0.285's microcode (T3, read: TRAP, TRAPV, CHK and the divide-by-zero trap
     stack and refill without SSW_N) both clear I/N for group 2 and set it for
-    group 1 (docs/worklog.md question 17, decided 2026-09-21).  This test
+    group 1 (docs/history/worklog.md question 17, decided 2026-09-21).  This test
     asserted I/N set for TRAP until then, from a reading of the manual alone.
     The stacked PC and IR are not asserted (UM 6.2.5: unpredictable).
     """
@@ -759,6 +761,53 @@ BUS_ERROR_ACCESSES = (
     ("PC-relative byte read", 0x8FF000, [0x103A, 0x0FFF, NOP], True, 6, 0x900001),
     ("PC-relative word read", 0x8FF000, [0x303A, 0x0FFE, NOP], True, 6, 0x900000),
 )
+
+
+@pytest.mark.parametrize(
+    ("name", "program"),
+    [
+        ("the closing prefetch of NOP", [NOP]),
+        ("the refill after MOVE.W #imm's extension word", [0x303C, 0x1234]),
+        ("the early prefetch of PEA (A0), before its push", [0x4850]),
+    ],
+)
+def test_a_bus_error_on_a_queue_refill_is_a_program_space_read_fault(name, program):
+    """BERR on the queue's own reads: the refill at the end of every instruction,
+    the refill after an extension word, and the refill PEA makes before it
+    pushes (UM 6.3.9.1; the prefetch reads are program references, UM Table
+    3-2).  Asserted as for the operand accesses above; the stacked PC and IR
+    are not asserted (docs/claims.md, "Outside the contract").
+    """
+    bus = Bus()
+    start = 0x8FFFFC  # the refill reads $900000, where BERR is asserted
+
+    def guard(access):
+        def guarded(address, *value):
+            if address & 0xFF0000 == 0x900000:
+                raise BusError(address)
+            return access(address, *value)
+
+        return guarded
+
+    bus.set_long(0, STACK)
+    bus.set_long(4, start)
+    bus.set_long(2 * 4, 0x3000)
+    bus.load(0x3000, [NOP] * 4)
+    bus.load(start, program)
+    cpu = M68000CPU(
+        guard(bus.read_byte), guard(bus.read_word), guard(bus.write_byte), guard(bus.write_word)
+    )
+    cpu.reset()
+    cpu.R[8] = 0x4000
+    cpu.step()
+    assert cpu.PC == 0x3000, f"{name}: the bus-error handler runs"
+    sp = cpu.R[15]
+    assert sp == STACK - 14, f"{name}: a seven-word frame"
+    information = bus.word(sp)
+    assert information & 0x10, f"{name}: R/W says read"
+    assert not information & 0x08, f"{name}: I/N, part of an instruction"
+    assert information & 0x07 == 6, f"{name}: supervisor program space"
+    assert bus.long(sp + 2) == 0x900000, f"{name}: the refill's address"
 
 
 @pytest.mark.parametrize(("name", "start", "program", "read", "fc", "address"), BUS_ERROR_ACCESSES)
@@ -918,12 +967,11 @@ def test_chk_with_a_zero_register_does_not_trap():
 def test_the_reset_instruction_calls_the_host_hook_and_changes_nothing_else():
     """RESET -- the RESET line is pulsed; the processor state is unaffected (PRM 6-83).
 
-    UM Table 8-12: 132 clocks.  The host sees the pulse through
-    ``reset_devices``; no corpus case sets it.
+    UM Table 8-12: 132 clocks.  The host sees the pulse through the
+    ``reset_devices`` keyword; no corpus case sets it.
     """
-    cpu, bus = with_vectors()
     pulses = []
-    cpu.reset_devices = lambda: pulses.append(True)
+    cpu, bus = with_vectors(reset_devices=lambda: pulses.append(True))
     restart(cpu, bus, [0x4E70, NOP], sr=0x2000)
     registers = list(cpu.R)
     assert cpu.step() == 132
@@ -1227,3 +1275,25 @@ def test_the_words_no_renaming_reaches_match_the_manual():
             for address in written | set(memory):
                 expected = memory[address] if address in memory else before[address]
                 assert bus.memory[address] == expected, f"{what}: byte {address:06X}"
+
+
+def test_an_odd_reset_vector_is_a_double_bus_fault_that_halts():
+    """RESET -- an address error while the reset exception fetches its first
+    instruction is a double bus fault: the processor halts until reset again
+    (UM 5.4.4 names the reset exception among the sequences whose fault
+    halts; 6.3.1).  No corpus has a reset-pin case; this is the manual's rule.
+    """
+    bus = Bus()
+    bus.set_long(0, STACK)
+    bus.set_long(4, 0x1001)  # an odd initial PC: the first instruction fetch faults
+    cpu = M68000CPU(bus.read_byte, bus.read_word, bus.write_byte, bus.write_word)
+    clocks = cpu.reset()
+    assert cpu.halted
+    assert clocks > 0
+    assert cpu.step() == 4  # idles, halted
+    assert (
+        bus.log.count(("rw", 0x1001, bus.word(0x1001))) == 0
+    )  # the odd read never reached the bus
+    bus.set_long(4, 0x1000)
+    cpu.reset()
+    assert not cpu.halted and cpu.PC == 0x1000

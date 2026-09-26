@@ -26,28 +26,65 @@ what WinUAE's run decides, the claim rests on emulator-derived oracles
 (MAME's microcode transcription): strong detectors, not a hardware
 judgement.
 
-## Certification record
+## Certification record: commit `1f43e0b` (2026-09-25), release 0.1.0
 
-Linux x86_64, a shared 32-core machine at a load average of 30-50 (timings
-are upper bounds). CPython 3.14.4; PyPy 7.3.23 / Python 3.11.15.
+Every gate, both interpreters, against the commit that fixed the last core
+change of the polish round (a fault during the reset sequence halts). The
+commits after it on the release branch change documents only; `src/`,
+`tests/`, `validation/`, `scripts/`, `benchmarks/` and `examples/` are
+byte-identical to `1f43e0b`. Linux x86_64, a shared 32-core machine at a load
+average of 10-15 from other users (timings are upper bounds; "Speed" below
+has the load-independent comparison). CPython 3.14.4; PyPy 7.3.20 / Python
+3.11.13.
 
 | Gate | Tier | Pin | Result | CPython | PyPy |
 | --- | --- | --- | --- | ---: | ---: |
+| The whole suite (`pytest -q` with the corpus fetched): decoder, readability, BCD, the manual-derived and referee-pinned tests, the tooling, the gate and `step_clocks` | -- | -- | 2,155 passed | 18.8 s | 34.9 s |
+| The fast suite (`pytest -q` deselecting `test_corpus.py` and `test_step_clocks.py`, what CI runs on five interpreters) | -- | -- | 1,898 passed | 5.1 s | -- |
 | BCD tables: ABCD 262,144 + SBCD 262,144 + NBCD 1,024 inputs, result and X N Z V C (`tests/test_bcd.py`) | T1 | flamewing/68k-bcd-verifier `39a01be528b0744302bf1dc9b3463fc22a3fc45f`, table SHA-256 `8432868c…80147e5` | all agree | 0.8 s | 0.9 s |
-| SingleStepTests/m68000, 127 files, 317,500 cases (`tests/test_corpus.py`) | T3 (microcode) | `64b253116a3de04aaac4346c43680960dc9b67e5` | 317,500 / 317,500 | 27 s | 26 s |
-| Decoder: 65,536 first words vs MAME 0.285 `m68000.lst` | T3 | `mame0285` | 45,815 defined + ILLEGAL + 8,192 line A/F, every word's family agrees | -- | -- |
+| SingleStepTests/m68000, 127 files, 317,500 cases (`tests/test_corpus.py`), and `step_clocks` at every access end of the 261,894 cases without an address error (`tests/test_step_clocks.py`) | T3 (microcode) | `64b253116a3de04aaac4346c43680960dc9b67e5` | 317,500 / 317,500; all agree | 14.8 s | 12.9 s |
+| Decoder: 65,536 first words vs MAME 0.285 `m68000.lst` (`scripts/check_decoder_vs_mame.py`, listing SHA-256 `9b4605ef…95631`) | T3 | `mame0285` | 45,815 defined + ILLEGAL + 8,192 line A/F, every word's family agrees, 0 of 65,536 differ | 1.9 s | -- |
+| WinUAE's CPU-tester core vs the gate, run (`validation/referees/calibrate.py winuae`) | T2 in scope | WinUAE `1977af501f6c3389c2eefe119ecb10c82d6582f3` | 308,416 / 314,988 judged (2,512 not judged); every residual an address-error or 2-clock class named in [referees](referees.md) | -- | 12 s |
+| Musashi vs the gate, run (`calibrate.py musashi`) | T3 | Musashi `313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd` | 257,300 / 261,894 judged; every difference an undefined or disputed rule a higher tier decides | -- | 13 s |
+| The open questions put to both referees (`validation/referees/questions.py`) | T2/T3 | the same | the tables of [referees](referees.md), unchanged | -- | 5 s |
+| SingleStepTests/680x0 as a detector (`scripts/classify_680x0.py`) | T3 | `e0d5ece9670205cc84a0101081837deb446f86a3` | 787,660 / 1,000,060 agree; every disagreement classified, none `UNCLASSIFIED` | -- | 30 s |
+| MAME 0.285 lockstep, System 16B `altbeast`, 30 emulated seconds (`validation/lockstep.py compare altbeast --tag 30s`) | T3 | `mame0285`, romset `altbeast` | 24,595,631 instructions identical, 1,791 interrupts, 1 reset; every interrupt entry's clocks agree at all ten E-clock phases | -- | 104 s |
+| MAME 0.285 lockstep, Genesis Altered Beast, 40 emulated seconds (`compare genesis`) | T3 | the same; ROM SHA-1 `38945360…9b32f019` | 28,249,660 instructions identical (and the state before the 28,249,661st, where MAME stopped), 3,788 interrupts | -- | 114 s |
+| Coverage: first words the suite executes (`scripts/coverage_report.py encodings --suite`) | -- | -- | all 45,815 defined words (the gate alone: 38,019) | -- | see [coverage](coverage.md) |
+| Coverage: core statements the suite runs (`coverage_report.py lines --suite`) | -- | -- | 1,464 of 1,484 in the 12 core modules; the 20 unrun are import-time code and defensive asserts, no dead line | 49 s | -- |
+| Mutation: 176 seeded mutants (`scripts/mutate.py run`, `escalate`, `report`; 4 jobs) | -- | -- | 174 / 176 killed; the two survivors, N7 and M8, are [equivalent](mutation.md) | -- | 14 min (run 740 s + escalate 105 s, 4 jobs) |
 
 Commands, from the repository root with the corpus fetched
-(`python scripts/fetch_test_vectors.py`):
+(`python scripts/fetch_test_vectors.py`, and `--with-680x0` for the
+detector) and the referees built (`python validation/referees/build_referees.py`):
 
 ```text
-python -m pytest -q tests/test_bcd.py tests/test_corpus.py
+python -m pytest -q
+python -m pytest -q tests/test_bcd.py tests/test_corpus.py tests/test_step_clocks.py
 python scripts/run_corpus.py --all            # the same comparison, one line per file
+python scripts/check_decoder_vs_mame.py       # the decoder against MAME's listing
+python validation/referees/calibrate.py winuae
+python validation/referees/calibrate.py musashi
+python validation/referees/questions.py
+python scripts/classify_680x0.py
+python validation/lockstep.py compare altbeast --tag 30s     # needs MAME 0.285 and the romset
+python scripts/coverage_report.py encodings --suite
+python scripts/coverage_report.py lines --suite
+python scripts/mutate.py run --jobs 4 --out R.json && python scripts/mutate.py escalate R.json && python scripts/mutate.py report R.json
 ```
 
 `M68000_BCD_TABLE=path/to/bcd-table.bin` makes the BCD gate compare byte by
 byte against a locally generated table (build `bcd-gen.cc` at the pin with
 any C++ compiler and run it); without it the gate compares SHA-256.
+
+What a reader cannot reproduce from the repository alone: the MAME lockstep
+and `validation/disasm_vs_mame.py` need MAME 0.285 and the `altbeast`
+romset or the Genesis ROM (their command lines are in rung 4 below; the
+disassembly golden they wrote is committed and checked in CI); the
+transistorfet T1 row in the summary below rests on reading that project's
+README, not on a run here. Everything else has its command above or in
+[referees](referees.md), [coverage](coverage.md) or [mutation](mutation.md),
+and the weekly Oracles workflow reruns it.
 
 ### What each corpus case compares
 
@@ -92,6 +129,44 @@ order of every bus access is compared).
   now states: the stacked PC, the IR and access-information words, the
   halfway flags of a long, when (An)+ and -(An) move, and the clock cost.
 
+## Speed
+
+Measured with `benchmarks/compare_revisions.py`, the same-process A/B of two
+revisions: each is imported into one interpreter and the four workloads of
+`benchmarks/m68000_core_benchmark.py` are timed alternately, best of 30 in
+CPU time, so the shared machine's load (which moves separate runs by ±30%)
+cannot bury a small change. The polish round's ladder (2026-09-25), one
+commit per rung, every oracle green at each, a rung gaining under 5% on both
+interpreters reverted:
+
+| Rung | Change | CPython 3.14.4: base / memory / arithmetic / exceptions | PyPy 7.3.20 | Outcome |
+| --- | --- | --- | --- | --- |
+| A | `MASK` and `MSB` as tuples indexed by size, not dicts | x1.027 / 1.000 / 1.021 / 0.984 | x1.353 / 1.047 / 1.172 / 1.021 | kept |
+| B | the A7 byte step written out at its ten call sites instead of `_step_size` | x1.013 / 0.997 / 0.997 / 1.003 | x0.978 / 0.911 / 1.009 / 1.000 | reverted |
+| C | the three refills read the program word themselves instead of calling `_read_program_word` | x1.060 / 1.033 / 1.046 / 1.046 | x1.013 / 1.010 / 0.987 / 1.009 | kept |
+| D | the flag rule computed inside `_add` instead of in `_flags_add` (prototype on ADD alone) | x1.022 / 0.992 / 0.995 / 0.977 | x0.995 / 1.009 / 0.990 / 0.998 | not adopted: below the rule, and the coverage probe and 17 mutants observe `_flags_*` |
+| E | the six function-code wrappers built once | not measurable: they run only for a host that passes `function_codes=True`, which the benchmark host and every board do not | | declined |
+
+Dispatch was already one 65,536-entry table and SR one packed int before
+the ladder; what remains is Python frame depth (a memory-operand ALU
+instruction is eight to nine frames), which only a different core shape
+would remove. The ladder's total, rung A times rung C: CPython base x1.09,
+PyPy base x1.37.
+
+Absolute rates after the ladder, `benchmarks/m68000_core_benchmark.py`
+(median of 5 samples in wall time, warm, load average about 12 on the
+shared machine; the A/B's best-of-30 CPU-time samples run higher):
+
+| Workload | CPython 3.14.4 | PyPy 7.3.20 |
+| --- | ---: | ---: |
+| base (a copy loop through (An)+, DBF) | 1.39 M instr/s | 32.9 M |
+| memory (long moves, MOVEM, PEA) | 0.65 M | 18.7 M |
+| arithmetic (MULU, DIVU, shifts, ABCD) | 1.18 M | 19.1 M |
+| exceptions (TRAP #0, RTE) | 1.32 M | 33.5 M |
+
+A Mega Drive's 68000 executes about 1 million instructions a second, so
+PyPy runs the core well above real time and CPython near it.
+
 ## Rung 4: MAME 0.285 lockstep on real code
 
 `validation/lockstep.py record BOARD` runs MAME headless with
@@ -124,7 +199,10 @@ reaches the 68000's bus through the 315-5195 mapper (register 5 transfers;
 the reader drops those accesses), drives the 68000's RESET once during boot
 (partway through an instruction, which an instruction-level core cannot
 reproduce, so the lockstep takes D0-D7/A0-A6/USP from MAME's next line
-after that one reset), and raises IRQ4. On the Genesis the Z80 reaches the
+after that one reset; PC, SR and SSP come from the core's own reset: one
+resynchronisation of fifteen registers in 24,595,631 instructions, accepted
+on 2026-09-25 as a limitation of the comparison, not a claim about the
+core), and raises IRQ4. On the Genesis the Z80 reaches the
 68000's bus through its bank window (dropped likewise), and the bus drops
 TAS's write-back. Interrupts are recognised where MAME's next line is a
 handler entered with the mask raised; the host then holds that level for
@@ -155,7 +233,7 @@ case falls outside the rules (none is printed as `UNCLASSIFIED`).
 | Cases | Cause | Files | Explained by | WinUAE, run (docs/referees.md) |
 | ---: | --- | --- | --- | --- |
 | 178,087 | An address error costs 8 clocks more here: the aborted bus cycle (4) and 4 more before the two internal steps | 62 files | **T2**: WinUAE charges the aborted access 4 clocks (`exception3_read_access`, `exception3_write_access`) and 8 more before the frame (`Exception_ce000`, `start = 8` for a 68000 address error), 12 in all, as MAME's microcode does; CLK charges 4. `newcpu.cpp` at WinUAE `1977af5`. | **T2 by running**: clocks = core in all 178,083 judged (8 clocks: decisive). |
-| 123,862 | The PC stacked by an address error | 62 files | **Partly open.** For a jump to an odd address WinUAE (T2) stacks the instruction's address + 2 with I/N clear (`i_JMP`: `incpc("2")`, `exception3_read_prefetch_only`), as this core and MAME do; CLK stacks the odd target with I/N set. For operand faults WinUAE computes a mode-dependent stacked PC (`check_address_error`, `exception_pc_offset`, MOVE's `pcextra`) of the same kind as MAME's microcode PC, but its values were not evaluated case by case. **DBcc** (about 1,960 of these) is a three-way disagreement: MAME stacks the instruction + 4, CLK the odd target, and WinUAE's generator reads as the target + 2 (`i_DBcc`: `incpc` to the target, then `exception3_read_prefetch`, which adds 2 on a 68000). Open question for Aubrey (docs/worklog.md). | pc = core in 118,245; **contradicted** in 5,613: MOVEM (d8,An,Xn)/(d8,PC,Xn) (1,069, WinUAE = CLK), JSR via (d16,An)/(d8,An,Xn)/(d16,PC)/(d8,PC,Xn) (2,580, neither: instruction + 2), DBcc (1,964, neither: target + 2, as read). T2 conflicts with the gate: open (docs/worklog.md). |
+| 123,862 | The PC stacked by an address error | 62 files | **Partly open.** For a jump to an odd address WinUAE (T2) stacks the instruction's address + 2 with I/N clear (`i_JMP`: `incpc("2")`, `exception3_read_prefetch_only`), as this core and MAME do; CLK stacks the odd target with I/N set. For operand faults WinUAE computes a mode-dependent stacked PC (`check_address_error`, `exception_pc_offset`, MOVE's `pcextra`) of the same kind as MAME's microcode PC, but its values were not evaluated case by case. **DBcc** (about 1,960 of these) is a three-way disagreement: MAME stacks the instruction + 4, CLK the odd target, and WinUAE's generator reads as the target + 2 (`i_DBcc`: `incpc` to the target, then `exception3_read_prefetch`, which adds 2 on a 68000). Contested ([claims](claims.md)). | pc = core in 118,245; **contradicted** in 5,613: MOVEM (d8,An,Xn)/(d8,PC,Xn) (1,069, WinUAE = CLK), JSR via (d16,An)/(d8,An,Xn)/(d16,PC)/(d8,PC,Xn) (2,580, neither: instruction + 2), DBcc (1,964, neither: target + 2, as read). T2 conflicts with the gate: **contested**, the core stays on the gate ([claims](claims.md)). |
 | 17,119 | Whether an address register had moved when the fault came | 22 files | **T2**: WinUAE's rules are this core's: `-(An)` is decremented before the check on a 68000, a MOVE `(An)+` destination is not incremented, a long MOVE to `-(An)` leaves An, ADDX/SUBX's special case (`check_address_error`, `move_68000_address_error`). | An/Dn = core in 16,746 (**T2 by running**); **contradicted** for CMPM.L (An)+,(An)+ (373, neither). Not in this row: 14,148 word (An)+ faults where core and CLK agree An moved and WinUAE says it did not (open). |
 | 8,180 | Accesses before the fault differ (MOVE with a PC-relative source; RTE, RTR) | MOVE.w, MOVE.l, RTE, RTR | the causes in the next rows, seen before a fault | No pre-exception field differs but MOVE to -(An)'s clocks (18: +2, inside ±2). |
 | 8,049 | RTE and RTR read the stack in another order (CLK reads the PC's high word before SR) | RTE, RTR | **T2**: WinUAE reads SR, then PC high, then PC low (`i_RTE`, 68000 branch: "Read SR (SP+=6), Read PC high, Read PC low"; `i_RTR` likewise). | Data-read order = core in all 8,048 judged, but bus order is not what cputest checks: **T3 by running** (the T2 label was too strong). |
@@ -186,8 +264,9 @@ undecided by T2.  Running contradicted the reading in three places (the
 stacked PC of MOVEM and JSR through indexed and displacement modes, and
 CMPM.L's An) and found a disagreement the table could not show, because
 the core and CLK agree on it (a word (An)+ that faults: WinUAE leaves An).
-Each is an open question for Aubrey in docs/worklog.md; the core follows
-the gate.
+Each is **contested** in [claims](claims.md) (decided 2026-09-21: the core
+follows the gate until real-hardware evidence decides); the decision record
+is [history/worklog.md](history/worklog.md).
 
 ## Rung 6: interrupts and STOP
 
@@ -210,7 +289,7 @@ ten E-clock phases once the acknowledge adds MAME's one clock after VPA
 (`vpa_sync`, `vpa_after` in m68000.cpp): 44 clocks plus 5 to 14 of E-clock
 wait for an autovector, 44 for a vectored acknowledge (UM Table 8-14).
 
-## Coverage and mutation (2026-09-21)
+## Coverage and mutation (2026-09-21, rerun 2026-09-26)
 
 What the gates above reach, and how much a wrong core would have to differ
 before the suite noticed, are measured in [coverage](coverage.md) and
@@ -231,10 +310,13 @@ before the suite noticed, are measured in [coverage](coverage.md) and
   traced illegal, line A/F or privilege-violating instruction was followed
   by a trace exception, contrary to UM 6.3.8 (MAME's microcode and WinUAE
   agree with the manual). No corpus could see it.
-- Of 176 seeded mutants the suite at e3629c1 killed 158; with this
-  session's tests, 173. N7 and M8 are equivalent to the core; D10, the flags
-  after DIVS by zero, is undefined in PRM, absent from both corpora, and
-  open.
+- Of 176 seeded mutants the suite at e3629c1 killed 158; with the coverage
+  and survivor tests, 173; with the referee-pinned divide-by-zero flags
+  (2026-09-21), 174. The two survivors, N7 and M8, are equivalent to the
+  core: nothing a host can observe changes.
+  Rerun at `1f43e0b` for 0.1.0 (2026-09-26, PyPy, 14 min at 4 jobs): 174
+  again, the same two survivors; the core is 1,484 statements now and the
+  suite runs 1,464 of them.
 
 ## The tier rule
 
@@ -255,6 +337,7 @@ until someone runs the same case on silicon.
 
 | Oracle | Tier | License | Pin | Coverage | Status here |
 | --- | --- | --- | --- | --- | --- |
+| MAME 0.285 `m68000.lst`, the microcoded core's decode table | T3 | BSD-3-Clause | `mame0285`, SHA-256 `9b4605ef…95631` | which of the 65,536 first words are which instruction | **Checked word for word** by `scripts/check_decoder_vs_mame.py`: 45,815 defined words agree, 0 differ |
 | flamewing/68k-bcd-verifier | T1 | GPL-3.0 | `39a01be528b0744302bf1dc9b3463fc22a3fc45f` (2018-08-31) | ABCD, SBCD, NBCD: all inputs, all flags | **Gate: all 525,312 inputs agree** (generator run locally, table hashed) |
 | transistorfet/68k-test-runner | T1 (tiny) | GPL-3.0 | `5b10d9f68a3f4370e02f5bda8afd28d2a86e69e7` (2023-06-12) | ASL.b, ASR.b of the 2023 Harte corpus on a real 68000 board | Not fetched; evidence only |
 | WinUAE `cputest` and its 68000 core | T2 (inside cputest's checked scope) | GPL-2.0+ | `1977af501f6c3389c2eefe119ecb10c82d6582f3` (2026-09-17) | Integer instructions, undefined flags, address/bus error frames, cycle counts to ±2 (7 MHz Amiga) | **Built and run** (validation/referees, not committed): vs the gate 308,416 / 314,988 judged cases agree; the 680x0 table re-derived; [referees](referees.md) |
@@ -281,9 +364,10 @@ and CCR against a table, and reports deviations. README: "Real hardware
 naturally passes all tests; this has been verified on: Model 1 Sega Genesis,
 Model 3 VA2 Sega Genesis. For reference, the original BCD data I used to
 reverse-engineer the operations was obtained from a Model 1." The
-expected tables are generated by the source; a Python port of the table
-generator, with the rule stated in [undocumented-behavior](undocumented-behavior.md),
-is the planned T1 gate for the three instructions. Limits: only BCD; only
+expected tables are generated by the source; the rule, stated in
+[undocumented-behavior](undocumented-behavior.md) and written out in
+`_bcd.py`, is the T1 gate for the three instructions (`tests/test_bcd.py`;
+the certification record above). Limits: only BCD; only
 the register forms are timed by the frame counter, not cycle-verified.
 
 ## T1 (evidence): transistorfet's hardware runner
@@ -390,8 +474,8 @@ transactions [["r", 4, fc 2, 0xDE9EC, ".w", 0x326B, uds 1, lds 1]]
 Two conventions to get right: `pc` is MAME's `m_au`, "next prefetch
 address", **the instruction's address + 4**, so the opcode word is at
 `pc - 4` and equals `prefetch[0]`; and `ram` holds 16-bit words at even
-addresses (the `decode.py` output splits them into bytes, this project's
-runner will not). The data bus for a byte access carries the byte in the
+addresses (the `decode.py` output splits them into bytes; `tests/corpus.py`
+does not). The data bus for a byte access carries the byte in the
 half the strobes select (`0xAB00` for an upper-byte read), as on the pins.
 
 ## T3: SingleStepTests/680x0 (Tom Harte)
@@ -441,8 +525,8 @@ therefore need two small adapters, not one.
 the microcoded core (Olivier Galibert, `m68000gen.py` generates the handlers
 from the microcode and nanocode tables it embeds; `m68000musashi.cpp` keeps
 the old core as an alternative device). A whole-game trace from a System
-16 board is the long-sequence check this project will use in the role
-ZEXALL plays for z80-python: not a hardware claim, but millions of
+16 board is the long-sequence check this project uses in the role ZEXALL
+plays for z80-python (rung 4 above): not a hardware claim, but millions of
 instructions of real code with real interrupt timing. The recipe, a
 verified run, and the register names are in [mame-oracle](mame-oracle.md).
 
@@ -456,7 +540,7 @@ typographical errors in the timing tables. Not an oracle tier.
 
 ## Certification ladder
 
-In the order the [handoff brief](handoff-brief.md) prescribes, with status:
+In the order the [handoff brief](history/handoff-brief.md) prescribed, with status:
 
 1. SingleStepTests/m68000, rung-1 files (NOP, MOVEQ, Bcc, RTS, MOVE): pass.
 2. BCD tables (T1): pass.
@@ -467,7 +551,8 @@ In the order the [handoff brief](handoff-brief.md) prescribes, with status:
    every disagreement named; stacked PCs of operand faults partly open.
 6. Interrupts and STOP: 12 scenarios, consistent with the manual and MAME.
    (Coverage and mutation, 2026-09-21: every defined first word executed by
-   the suite; 173 of 176 mutants killed; see [coverage](coverage.md).)
+   the suite; 174 of 176 mutants killed, the two survivors equivalent; see
+   [coverage](coverage.md) and [mutation](mutation.md).)
 7. Referees (2026-09-21, [referees](referees.md)): WinUAE's CPU-tester core
    (T2 in scope) and Musashi (T3) built and run; calibrated against the gate
    (97.9% and 98.2% of judged cases, every residual named); the open

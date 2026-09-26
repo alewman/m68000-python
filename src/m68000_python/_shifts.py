@@ -140,17 +140,29 @@ class ShiftsMixin:
         self._shift_register(opcode, "ro")
 
     def _op_asd_memory(self, opcode: int) -> None:
-        """ASd -- arithmetic shift a memory word by one (PRM 4-22; UM Table 8-7)."""
+        """ASd -- arithmetic shift a memory word by one (PRM 4-22; UM Table 8-7).
+
+        Read, refill, write, and the PC an address error stacks: SST ASL.w, ASR.w.
+        """
         self._shift_memory(opcode, "as")
 
     def _op_lsd_memory(self, opcode: int) -> None:
-        """LSd -- logical shift a memory word by one (PRM 4-113; UM Table 8-7)."""
+        """LSd -- logical shift a memory word by one (PRM 4-113; UM Table 8-7).
+
+        Read, refill, write, and the PC an address error stacks: SST LSL.w, LSR.w.
+        """
         self._shift_memory(opcode, "ls")
 
     def _op_roxd_memory(self, opcode: int) -> None:
-        """ROXd -- rotate a memory word through X by one (PRM 4-163; UM Table 8-7)."""
+        """ROXd -- rotate a memory word through X by one (PRM 4-163; UM Table 8-7).
+
+        Read, refill, write, and the PC an address error stacks: SST ROXL.w, ROXR.w.
+        """
         self._shift_memory(opcode, "rox")
 
     def _op_rod_memory(self, opcode: int) -> None:
-        """ROd -- rotate a memory word by one (PRM 4-160; UM Table 8-7)."""
+        """ROd -- rotate a memory word by one (PRM 4-160; UM Table 8-7).
+
+        Read, refill, write, and the PC an address error stacks: SST ROL.w, ROR.w.
+        """
         self._shift_memory(opcode, "ro")

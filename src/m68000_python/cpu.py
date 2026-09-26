@@ -36,7 +36,7 @@ from m68000_python._core import (
 from m68000_python._dispatch import Handler, build_table
 from m68000_python._ea import EAMixin
 from m68000_python._flags import FlagsMixin
-from m68000_python._loads import LoadsMixin, MultipleMixin
+from m68000_python._loads import LoadsMixin
 from m68000_python._shifts import ShiftsMixin
 from m68000_python._system import SystemMixin
 from m68000_python.state import CPUState
@@ -48,7 +48,6 @@ class M68000CPU(
     BitsMixin,
     ControlMixin,
     LoadsMixin,
-    MultipleMixin,
     ShiftsMixin,
     SystemMixin,
     EAMixin,
@@ -77,6 +76,8 @@ class M68000CPU(
       docs/undocumented-behavior.md).  Defaults to ``write_byte``.
     * ``address_error(address, write, fc)``: told about the access an address
       error aborted, which never reaches the bus (UM 6.3.10).
+    * ``reset_devices()``: called when the RESET instruction pulses the RESET
+      line (PRM 6-83); the processor itself is not reset.
 
     A host raises :class:`BusError` from any bus callable to assert BERR.
     """
@@ -94,7 +95,15 @@ class M68000CPU(
         function_codes: bool = False,
         tas_write: WriteFunction | None = None,
         address_error: Callable[[int, bool, int], None] | None = None,
+        reset_devices: Callable[[], None] | None = None,
     ) -> None:
+        for name, value in (("acknowledge", acknowledge), ("tas_write", tas_write),
+                            ("address_error", address_error),
+                            ("reset_devices", reset_devices)):  # fmt: skip
+            if value is not None and not callable(value):
+                raise TypeError(f"{name} must be callable or None")
+        if type(function_codes) is not bool:
+            raise TypeError("function_codes must be a bool")
         self._init_core(
             read_byte,
             read_word,
@@ -104,6 +113,7 @@ class M68000CPU(
             function_codes,
             tas_write,
             address_error,
+            reset_devices,
         )
         cls = type(self)
         if "_table" not in cls.__dict__:
@@ -164,8 +174,12 @@ class M68000CPU(
         """Start executing at ``address``: refill the prefetch queue from it.
 
         Two program reads, as a jump does; no clocks are counted.  The host
-        uses this instead of a reset when it loads a program itself.
+        uses this instead of a reset when it loads a program itself.  An odd
+        address is refused: instructions live at even addresses (UM 6.3.10),
+        and a jump to an odd one is an address error, not a start.
         """
+        if address & 1:
+            raise ValueError("an instruction address must be even")
         address &= 0xFFFFFFFF
         self.ir = self._read_program(address & MASK24)
         self.irc = self._read_program((address + 2) & MASK24)
@@ -206,8 +220,14 @@ class M68000CPU(
     def reset(self) -> int:
         """The reset exception (UM 6.3.1): S set, T clear, mask 7, SSP and PC from 0 and 4.
 
-        Nothing is pushed.  Returns the clocks spent: 40 on the chip,
-        counted from RESET negated to the first instruction (UM Table 8-14).
+        Nothing is pushed.  A fault while fetching the vectors or the first
+        instruction (an odd initial PC) halts the processor as a double bus
+        fault (UM 5.4.4).  Returns the clocks spent, 42: 16 internal, the
+        four vector reads, and the two-read refill of the queue with its 2
+        idle clocks, as every other exception entry refills it.  UM Table
+        8-14 prints 40(6/0) for reset; no corpus has a reset-pin case and
+        the referees are not run on one, so the 2-clock difference is open
+        (docs/claims.md, "Undecidable here").
         """
         self._cycles = 0
         self.halted = False
@@ -216,10 +236,15 @@ class M68000CPU(
         self._nmi_edge = False
         self._set_sr((self.SR | S | IPL_MASK) & ~T)
         self._cycles += 16
-        self.R[15] = (self._read_program_word(0) << 16) | self._read_program_word(2)
-        pc = (self._read_program_word(4) << 16) | self._read_program_word(6)
-        self._fault_pc = pc
-        self._jump_idle(pc)
+        try:
+            self.R[15] = (self._read_program_word(0) << 16) | self._read_program_word(2)
+            pc = (self._read_program_word(4) << 16) | self._read_program_word(6)
+            self._fault_pc = pc
+            self._jump_idle(pc)
+        except GroupZero:
+            # An address or bus error during the reset sequence (an odd initial
+            # PC, BERR on a vector) is a double bus fault: halt (UM 5.4.4).
+            self.halted = True
         self.clock += self._cycles
         return self._cycles
 

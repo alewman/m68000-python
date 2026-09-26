@@ -77,6 +77,14 @@ class StepRecord:
             raise ValueError("cycles must be a positive integer")
         if self.kind is not BoundaryKind.INSTRUCTION and self.instruction is not None:
             raise ValueError("only instruction boundaries carry an instruction")
+        if self.instruction is not None and type(self.instruction) is not Instruction:
+            raise ValueError("instruction must be an Instruction or None")
+        if self.accesses is not None and (
+            type(self.accesses) is not tuple or not all(_is_access(a) for a in self.accesses)
+        ):
+            raise ValueError(
+                'accesses must be a tuple of ("r" or "w", address, value, size 1 or 2)'
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -319,6 +327,20 @@ class DebugSession:
                 for offset in range(access[3])
             )
         )
+
+
+def _is_access(access: object) -> bool:
+    if type(access) is not tuple or len(access) != 4:
+        return False
+    kind, address, value, size = access
+    return (
+        kind in ("r", "w")
+        and type(address) is int
+        and 0 <= address <= 0xFFFFFF
+        and type(value) is int
+        and value >= 0
+        and size in (1, 2)
+    )
 
 
 def _address(address: int) -> int:
