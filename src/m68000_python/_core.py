@@ -159,6 +159,10 @@ class CoreMixin:
         The originals stay readable as ``read_byte``, ``read_word``,
         ``write_byte`` and ``write_word``.
         """
+        for name, value in (("read_byte", read_byte), ("read_word", read_word),
+                            ("write_byte", write_byte), ("write_word", write_word)):  # fmt: skip
+            if not callable(value):
+                raise TypeError(f"{name} must be callable")
         self.read_byte, self.read_word = read_byte, read_word
         self.write_byte, self.write_word = write_byte, write_word
         tas_write = self.tas_write

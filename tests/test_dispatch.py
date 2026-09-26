@@ -27,9 +27,14 @@ def test_every_rule_is_reachable() -> None:
     assert {name for _, _, name, _ in COMPILED} <= names
 
 
+def _cpu() -> M68000CPU:
+    memory = bytearray(0x10000)
+    return M68000CPU(memory.__getitem__, memory.__getitem__, memory.__setitem__, memory.__setitem__)
+
+
 def test_table_is_built_once_per_class() -> None:
-    first = M68000CPU(None, None, None, None)
-    second = M68000CPU(None, None, None, None)
+    first = _cpu()
+    second = _cpu()
     assert first._table is second._table
     assert len(first._table) == 0x10000
 

@@ -22,4 +22,5 @@ commands); `python -m m68000_python` puts it on a flat 16 MB RAM host:
 python -m m68000_python --zip altbeast.zip:epr-11907.a7,epr-11906.a5@0 --reset -c "step 5"
 ```
 
-Numbers are hexadecimal (`$`, `0x` or bare); `#` makes one decimal.
+Numbers are decimal, or hexadecimal with a `$` or `0x` prefix, as in every
+console of this family.

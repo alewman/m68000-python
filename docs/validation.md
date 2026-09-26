@@ -35,14 +35,15 @@ are upper bounds). CPython 3.14.4; PyPy 7.3.23 / Python 3.11.15.
 | --- | --- | --- | --- | ---: | ---: |
 | BCD tables: ABCD 262,144 + SBCD 262,144 + NBCD 1,024 inputs, result and X N Z V C (`tests/test_bcd.py`) | T1 | flamewing/68k-bcd-verifier `39a01be528b0744302bf1dc9b3463fc22a3fc45f`, table SHA-256 `8432868c…80147e5` | all agree | 0.8 s | 0.9 s |
 | SingleStepTests/m68000, 127 files, 317,500 cases (`tests/test_corpus.py`) | T3 (microcode) | `64b253116a3de04aaac4346c43680960dc9b67e5` | 317,500 / 317,500 | 27 s | 26 s |
-| Decoder: 65,536 first words vs MAME 0.285 `m68000.lst` | T3 | `mame0285` | 45,815 defined + ILLEGAL + 8,192 line A/F, every word's family agrees | -- | -- |
+| Decoder: 65,536 first words vs MAME 0.285 `m68000.lst` (`scripts/check_decoder_vs_mame.py`, listing SHA-256 `9b4605ef…95631`) | T3 | `mame0285` | 45,815 defined + ILLEGAL + 8,192 line A/F, every word's family agrees, 0 of 65,536 differ | 4 s | -- |
 
 Commands, from the repository root with the corpus fetched
 (`python scripts/fetch_test_vectors.py`):
 
 ```text
-python -m pytest -q tests/test_bcd.py tests/test_corpus.py
+python -m pytest -q tests/test_bcd.py tests/test_corpus.py tests/test_step_clocks.py
 python scripts/run_corpus.py --all            # the same comparison, one line per file
+python scripts/check_decoder_vs_mame.py       # the decoder against MAME's listing
 ```
 
 `M68000_BCD_TABLE=path/to/bcd-table.bin` makes the BCD gate compare byte by

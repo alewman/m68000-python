@@ -95,6 +95,12 @@ class M68000CPU(
         tas_write: WriteFunction | None = None,
         address_error: Callable[[int, bool, int], None] | None = None,
     ) -> None:
+        for name, value in (("acknowledge", acknowledge), ("tas_write", tas_write),
+                            ("address_error", address_error)):  # fmt: skip
+            if value is not None and not callable(value):
+                raise TypeError(f"{name} must be callable or None")
+        if type(function_codes) is not bool:
+            raise TypeError("function_codes must be a bool")
         self._init_core(
             read_byte,
             read_word,
@@ -206,8 +212,12 @@ class M68000CPU(
     def reset(self) -> int:
         """The reset exception (UM 6.3.1): S set, T clear, mask 7, SSP and PC from 0 and 4.
 
-        Nothing is pushed.  Returns the clocks spent: 40 on the chip,
-        counted from RESET negated to the first instruction (UM Table 8-14).
+        Nothing is pushed.  Returns the clocks spent, 42: 16 internal, the
+        four vector reads, and the two-read refill of the queue with its 2
+        idle clocks, as every other exception entry refills it.  UM Table
+        8-14 prints 40(6/0) for reset; no corpus has a reset-pin case and
+        the referees are not run on one, so the 2-clock difference is open
+        (docs/claims.md, "Undecidable here").
         """
         self._cycles = 0
         self.halted = False

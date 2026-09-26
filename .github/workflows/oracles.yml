@@ -1,0 +1,77 @@
+# The evidence CI cannot rerun on every push: the referees built from pinned
+# sources and calibrated against the gate, the second corpus as a detector,
+# the decoder against MAME's listing, the coverage map and the mutation
+# score.  Each step's headline number is the one docs/validation.md,
+# docs/referees.md, docs/coverage.md and docs/mutation.md record; a step
+# fails when its number moves, so the documents cannot drift from the tree.
+#
+# Not covered here: the MAME lockstep (needs MAME 0.285 and the ROMs) and
+# the T1 BCD gate, which ci.yml runs on every push.  Scheduled weekly, and
+# runnable on demand.
+name: Oracles
+
+on:
+  schedule:
+    - cron: "23 6 * * 1"   # Mondays, 06:23 UTC
+  workflow_dispatch:
+
+jobs:
+  oracles:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "pypy3.11"
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e ".[dev]"
+
+      - name: Restore the SingleStepTests/m68000 corpus
+        uses: actions/cache@v4
+        with:
+          path: tests/68000_test_vectors/m68000
+          key: m68000-64b253116a3de04aaac4346c43680960dc9b67e5
+      - name: Restore the SingleStepTests/680x0 corpus
+        uses: actions/cache@v4
+        with:
+          path: tests/68000_test_vectors/680x0
+          key: 680x0-e0d5ece9670205cc84a0101081837deb446f86a3
+      - name: Fetch what the caches did not hold
+        run: |
+          test -f tests/68000_test_vectors/m68000/REVISION || python scripts/fetch_test_vectors.py
+          test -d tests/68000_test_vectors/680x0/68000/v1 || python scripts/fetch_test_vectors.py --with-680x0
+
+      - name: The decoder against MAME 0.285's m68000.lst, word for word
+        run: python scripts/check_decoder_vs_mame.py
+
+      - name: The second corpus as a detector, every disagreement classified
+        run: |
+          python scripts/classify_680x0.py 2>/dev/null | tee classify.txt
+          grep -q "^787,660 of 1,000,060 cases agree" classify.txt
+
+      - name: Build the referees from their pinned sources
+        run: python validation/referees/build_referees.py
+      - name: Calibrate WinUAE's tester core against the gate
+        run: |
+          python validation/referees/calibrate.py winuae | tee winuae.txt
+          grep -q "^TOTAL winuae vs m68000: 308416/314988 judged cases agree" winuae.txt
+      - name: Calibrate Musashi against the gate
+        run: |
+          python validation/referees/calibrate.py musashi | tee musashi.txt
+          grep -q "^TOTAL musashi vs m68000: 257300/261894 judged cases agree" musashi.txt
+      - name: The open questions, put to the referees
+        run: python validation/referees/questions.py
+
+      - name: Coverage map of the gate and the suite
+        run: |
+          python scripts/coverage_report.py encodings | tee encodings.txt
+          grep -q "executed as a first word        38,019" encodings.txt
+          python scripts/coverage_report.py paths | tail -5
+
+      - name: Mutation score of the suite
+        run: |
+          python scripts/mutate.py run --jobs 2 --python "$(command -v python)" --out mutation.json
+          python scripts/mutate.py escalate mutation.json --jobs 2 --python "$(command -v python)"
+          python scripts/mutate.py report mutation.json | tee mutation.txt
+          grep -q "^Score: 174/176" mutation.txt

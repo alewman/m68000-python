@@ -240,8 +240,10 @@ def _decode(name: str, opcode: int, reader: _Reader) -> tuple[str, tuple[str, ..
         return "move", (f"A{ry}", "USP")
     if name == "stop":
         return "stop", ("#" + _signed_hex_16(reader.word()),)
-    if name in ("reset", "nop", "rte", "rts", "trapv", "rtr", "illegal"):
+    if name in ("reset", "nop", "rte", "rts", "trapv", "rtr"):
         return name, ()
+    if name == "illegal" and opcode == 0x4AFC:
+        return "illegal", ()  # the one word that is ILLEGAL by name (PRM 4-107)
     if name == "chk":
         return "chk.w", (reader.ea(ea, 1), f"D{rx}")
     if name == "lea":

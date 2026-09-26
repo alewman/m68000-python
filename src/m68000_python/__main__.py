@@ -1,15 +1,16 @@
 """Load a program and step through it: ``python -m m68000_python``.
 
-    python -m m68000_python --load program.bin@1000 --pc 1000
+    python -m m68000_python --load program.bin@0x1000 --pc 0x1000
     python -m m68000_python --zip ROMPATH/altbeast.zip:epr-11907.a7,epr-11906.a5@0 --reset
-    python -m m68000_python --load game.md@0 --reset -c "break 206" -c "run 100000"
+    python -m m68000_python --load game.md@0 --reset -c "break 0x206" -c "run 100000"
 
 The host is a flat 16 MB RAM holding every image loaded, so ROM is writable
 and there are no devices: good for reading and stepping through code, not for
 running a board (for that, write a host -- validation/lockstep.py has two).
 ``--zip ZIP:EVEN,ODD@ADDRESS`` interleaves a pair of byte-wide ROMs, as 68000
 boards wire them.  Commands given with ``-c`` run first; then the prompt reads
-stdin, unless ``--batch`` is given.  ``help`` lists the commands.
+stdin, unless ``--batch`` is given.  ``help`` lists the commands.  Numbers,
+here and in the commands, are decimal unless written with ``$`` or ``0x``.
 """
 
 import argparse
@@ -60,7 +61,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--load", action="append", default=[], metavar="FILE@ADDRESS")
     parser.add_argument("--zip", action="append", default=[], metavar="ZIP:MEMBER[,ODD]@ADDRESS")
     start = parser.add_mutually_exclusive_group()
-    start.add_argument("--pc", help="start at this hex address")
+    start.add_argument("--pc", help="start at this address ($ or 0x for hexadecimal)")
     start.add_argument("--reset", action="store_true", help="start from the vectors at 0 and 4")
     parser.add_argument(
         "-c", "--command", action="append", default=[], help="run first (repeatable)"
