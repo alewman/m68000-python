@@ -39,7 +39,7 @@ def test_registers_render_the_whole_processor_state() -> None:
     assert lines[2] == "A0=00000000 A1=00000000 A2=00000000 A3=00000000"
     assert lines[3].endswith("A7=00008000")
     assert lines[4] == "PC=001002 SR=2700 .S..... I=7"
-    assert lines[5] == "USP=00000000 SSP=00008000 IPL=2 clock=46"  # reset 42 + moveq 4
+    assert lines[5] == "USP=00000000 SSP=00008000 IPL=2 clock=44"  # reset 40 + moveq 4
     assert commands.execute("r").lines == lines == commands.execute("regs").lines
 
 

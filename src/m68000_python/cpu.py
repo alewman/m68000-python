@@ -222,12 +222,11 @@ class M68000CPU(
 
         Nothing is pushed.  A fault while fetching the vectors or the first
         instruction (an odd initial PC) halts the processor as a double bus
-        fault (UM 5.4.4).  Returns the clocks spent, 42: 16 internal, the
-        four vector reads, and the two-read refill of the queue with its 2
-        idle clocks, as every other exception entry refills it.  UM Table
-        8-14 prints 40(6/0) for reset; no corpus has a reset-pin case and
-        the referees are not run on one, so the 2-clock difference is open
-        (docs/claims.md, "Undecidable here").
+        fault (UM 5.4.4).  Returns the clocks spent, 40 as UM Table 8-14
+        prints: 14 internal, the four vector reads, and the two-read refill
+        of the queue with its 2 idle clocks, as every other exception entry
+        refills it.  The 14 are Nuked-MD's: its gate-level 68000 reads the
+        SSP vector 14 clocks after RESET is released (docs/claims.md).
         """
         self._cycles = 0
         self.halted = False
@@ -235,7 +234,7 @@ class M68000CPU(
         self._trace_pending = False
         self._nmi_edge = False
         self._set_sr((self.SR | S | IPL_MASK) & ~T)
-        self._cycles += 16
+        self._cycles += 14
         try:
             self.R[15] = (self._read_program_word(0) << 16) | self._read_program_word(2)
             pc = (self._read_program_word(4) << 16) | self._read_program_word(6)
