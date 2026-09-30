@@ -29,7 +29,7 @@ def write_word(address: int, value: int) -> None:
 memory[0:8] = (0x8000).to_bytes(4, "big") + (0x1000).to_bytes(4, "big")
 memory[0x1000:0x1002] = bytes((0x70, 0x05))  # moveq #5,D0
 cpu = M68000CPU(memory.__getitem__, read_word, memory.__setitem__, write_word)
-assert cpu.reset() == 42
+assert cpu.reset() == 40
 assert cpu.capture_state() == CPUState(ssp=0x8000, pc=0x1000, ir=0x7005, sr=0x2700, clock=42)
 assert disassemble_bytes(bytes((0x70, 0x05)), 0x1000).text == "moveq #$5, D0"
 record = DebugSession(cpu, peek_word=read_word, track_accesses=True).step()

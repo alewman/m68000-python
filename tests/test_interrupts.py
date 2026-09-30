@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from conftest import make
 
-from m68000_python import AUTOVECTOR, SPURIOUS
+from m68000_python import AUTOVECTOR, M68000CPU, SPURIOUS
 
 NOP = 0x4E71
 HANDLER = 0x2000
@@ -22,6 +22,27 @@ def vectors(bus, **handlers) -> None:
     for vector in range(256):
         bus.set_long(vector * 4, handlers.get(f"v{vector}", HANDLER + 0x10 * (vector % 16)))
     bus.load(HANDLER, [NOP] * 0x200)
+
+
+def test_the_reset_exception_takes_40_clocks_and_reads_the_ssp_vector_after_14():
+    """UM Table 8-14: reset is 40(6/0).  Nuked-MD, a gate-level model of the
+    NMOS 68000 from die photographs, reads the SSP vector 14 clocks after
+    RESET is released, and every later access of the reset at the clocks
+    below (issue #3; its first read was stretched by the console's refresh)."""
+    memory = bytearray(0x10000)
+    memory[4:8] = (0x200).to_bytes(4, "big")  # the initial PC
+    starts = []
+
+    def read_word(address: int) -> int:
+        starts.append((address, cpu.step_clocks - 4))
+        return (memory[address] << 8) | memory[address + 1]
+
+    cpu = M68000CPU(lambda a: 0, read_word, lambda a, v: None, lambda a, v: None)
+    assert cpu.reset() == 40
+    # 14 idle clocks, the four vector reads, then the refill: its first read,
+    # 2 idle clocks, its second.
+    assert starts == [(0, 14), (2, 18), (4, 22), (6, 26), (0x200, 30), (0x202, 36)]
+    assert cpu.clock == 40
 
 
 def test_level_above_the_mask_is_taken_at_the_next_boundary():
