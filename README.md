@@ -69,8 +69,8 @@ lower tier detects; the highest tier that checks a claim decides it
   SingleStepTests file named wherever the manual is silent.
 
 Where the sources disagree the core follows the gate and the claim is
-**contested**: six address-error behaviours, three 2-clock questions, the
-double bus fault and the reset exception's total. Each is listed with what
+**contested**: six address-error behaviours, three 2-clock questions and
+the double bus fault. Each is listed with what
 would settle it ([docs/claims.md](docs/claims.md)). The order of bus cycles
 and the exact clock totals rest on MAME's lineage alone, and the pages say so.
 

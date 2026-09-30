@@ -11,9 +11,9 @@ the MAME lockstep's 5,579 interrupts, and scenario tests).
 
 `cpu.reset()` is the reset exception (UM 6.3.1): S set, T cleared, the mask
 raised to 7, SSP fetched from address 0 and PC from address 4, both in
-supervisor program space, the queue refilled, nothing pushed. It returns 42
-clocks (UM Table 8-14 prints 40(6/0); the difference is open, see
-[claims](claims.md)). A fault while it fetches the vectors or the first
+supervisor program space, the queue refilled, nothing pushed. It returns 40
+clocks, as UM Table 8-14 prints: the SSP vector is read 14 clocks in, where
+a gate-level model of the chip reads it (see [claims](claims.md)). A fault while it fetches the vectors or the first
 instruction (an odd initial PC, BERR on a vector) halts the processor: the
 double bus fault of UM 5.4.4. The host calls `reset()` when its RESET pin
 would be released; it may call `set_pc(address)` instead to start a program
