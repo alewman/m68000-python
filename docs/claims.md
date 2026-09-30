@@ -28,6 +28,7 @@ the same implementation are one confirmation.
 | **UAE / WinUAE** | WinUAE's CPU-tester core, built and run here (Hatari's core is the same code and is not counted again) | **T2** inside the scope its author checks on real Amigas, T3 outside it | results, all flags, address-error and odd-vector frames, read and prefetch bus-error frames, clock totals to within ±2 |
 | **CLK** (Tom Harte) | SingleStepTests/680x0 (1,000,060 cases) | T3 | every family, with its own choices on the disputed corners |
 | **Musashi** | built and run here | T3 | architectural results and group 1/2 exception entry only |
+| **Nuked-MD** (nukeykt et al.) | a gate-level Mega Drive model built from die photographs; one trace of its 68000, read (issue #3) | die-derived | the reset exception's clocks only |
 | **Motorola** | the PRM and the User's Manual | documentation | defined behaviour, published clock tables, exception rules; silent or ambiguous on the corners |
 | **The suite itself** | coverage mapping, 176 seeded mutants | not an oracle | shows where the evidence reaches and whether it would notice a wrong rule |
 
@@ -139,6 +140,15 @@ the same implementation are one confirmation.
   vector): the manual alone (UM 5.4.4 names the reset exception among the
   sequences whose fault is a double bus fault). No corpus has a reset-pin
   case.
+- **The reset exception takes 40 clocks** (UM Table 8-14, 40(6/0)): 14
+  internal, the four vector reads, and the two-read refill with the 2 idle
+  clocks every exception entry's refill has. The 14 come from Nuked-MD, a
+  gate-level Mega Drive model built from die photographs: its NMOS 68000
+  reads the SSP vector 14 clocks after RESET is released, and every later
+  access of the reset at the same clocks as the core's (issue #3, measured
+  by megadrive-python on Overdrive 2's reset; read from the trace, not run
+  here). The core took 42 until 2026-09-30. No corpus has a reset-pin case
+  and the referees were not run on one.
 - **ADDQ.L and SUBQ.L #,An take 8 clocks**: the manual and the gate say
   8, CLK says 6. WinUAE agrees with 8, but a 2-clock difference is inside
   its tolerance.
@@ -176,11 +186,6 @@ These need hardware that this project does not have.
 
   The core keeps the gate's values. A logic-analyser capture would settle
   them.
-- **The reset exception's total.** `reset()` returns 42 clocks: 16
-  internal, the four vector reads, and the two-read refill with the 2 idle
-  clocks every exception entry's refill has. UM Table 8-14 prints 40(6/0).
-  No corpus has a reset-pin case and the referees were not run on one
-  (found 2026-09-25).
 - **The double bus fault.** The core halts, as UM 5.4.4 says, and so do
   Musashi (run, with an odd SSP) and WinUAE's emulator (read). MAME takes another address
   error instead. cputest skips every test that would halt.
@@ -247,7 +252,6 @@ exception model.
   microcode transcription, over 317,500 single-step cases and 52.8
   million instructions of real game code in lockstep.
 - **Not settled by available evidence:** six address-error behaviours
-  where credible sources disagree, three 2-clock timing questions, the
-  reset exception's total, and the double bus fault, each listed with what
-  would settle it.
+  where credible sources disagree, three 2-clock timing questions, and
+  the double bus fault, each listed with what would settle it.
 - **Not claimed:** bus-error frame contents.

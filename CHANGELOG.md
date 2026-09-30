@@ -6,15 +6,17 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Open
+### Fixed
 
-- **The reset exception's clock total.** `reset()` returns 42 (16 internal
-  clocks, the four vector reads, and the two-read refill with its 2 idle
-  clocks, as every exception entry refills the queue); UM Table 8-14
-  prints 40(6/0). No corpus has a reset-pin case and the referees were not
-  run on one. Found on 2026-09-25 when the smoke test asserted the
-  docstring's 40; the docstring now says 42 and the difference is listed
-  under "Undecidable here" in docs/claims.md.
+- **The reset exception takes 40 clocks, not 42** (#3). `reset()` now
+  spends 14 internal clocks before reading the SSP vector, not 16, so it
+  returns 40, as UM Table 8-14 prints (40(6/0)), and every access of the
+  reset starts 2 clocks earlier. The 14 are measured: Nuked-MD's gate-level
+  68000 (built from die photographs) reads the SSP vector 14 clocks after
+  RESET is released, and the rest of the reset at the core's clocks. A host
+  whose timing counts from `reset()` sees every later clock 2 lower, which
+  moves the E-clock phase of autovectored interrupts. docs/claims.md moves
+  the reset total from "Undecidable here" to "Provisional".
 
 ## [0.1.0] — unreleased
 

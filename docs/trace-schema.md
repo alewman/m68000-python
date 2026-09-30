@@ -96,7 +96,7 @@ The first record of `examples/reference_trace.jsonl`: `moveq #5, D0` at
 closing prefetch of the word at `$1004`):
 
 ```json
-{"accesses":[["r",4100,26364,2]],"after":{"a":[0,0,0,0,0,0,0],"clock":46,"d":[5,0,0,0,0,0,0,0],"halted":false,"ipl":0,"ir":21376,"irc":26364,"nmi_edge":false,"pc":4098,"sr":9984,"ssp":32768,"stopped":false,"trace_pending":false,"usp":0},"before":{"a":[0,0,0,0,0,0,0],"clock":42,"d":[0,0,0,0,0,0,0,0],"halted":false,"ipl":0,"ir":28677,"irc":21376,"nmi_edge":false,"pc":4096,"sr":9984,"ssp":32768,"stopped":false,"trace_pending":false,"usp":0},"cycles":4,"instruction":{"address":4096,"data":"7005","mnemonic":"moveq","operands":["#$5","D0"]},"kind":"instruction","sequence":0,"version":1}
+{"accesses":[["r",4100,26364,2]],"after":{"a":[0,0,0,0,0,0,0],"clock":44,"d":[5,0,0,0,0,0,0,0],"halted":false,"ipl":0,"ir":21376,"irc":26364,"nmi_edge":false,"pc":4098,"sr":9984,"ssp":32768,"stopped":false,"trace_pending":false,"usp":0},"before":{"a":[0,0,0,0,0,0,0],"clock":40,"d":[0,0,0,0,0,0,0,0],"halted":false,"ipl":0,"ir":28677,"irc":21376,"nmi_edge":false,"pc":4096,"sr":9984,"ssp":32768,"stopped":false,"trace_pending":false,"usp":0},"cycles":4,"instruction":{"address":4096,"data":"7005","mnemonic":"moveq","operands":["#$5","D0"]},"kind":"instruction","sequence":0,"version":1}
 ```
 
 ## Comparison rules

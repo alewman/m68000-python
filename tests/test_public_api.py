@@ -48,7 +48,7 @@ def test_four_callables_over_a_bytearray_are_a_complete_host() -> None:
     memory[0:8] = (0x8000).to_bytes(4, "big") + (0x1000).to_bytes(4, "big")
     memory[0x1000:0x1004] = bytes((0x70, 0x05, 0x52, 0x80))  # moveq #5,D0; addq.l #1,D0
 
-    assert processor.reset() == 42  # UM Table 8-14 prints 40(6/0); see reset()'s docstring
+    assert processor.reset() == 40  # UM Table 8-14: 40(6/0)
     assert processor.step() == 4
     assert processor.step() == 8
     assert (processor.R[0], processor.PC, processor.R[15]) == (6, 0x1004, 0x8000)
@@ -120,7 +120,7 @@ def test_set_pc_refuses_an_odd_address() -> None:
 
 def test_step_clocks_is_read_only() -> None:
     processor, _ = make([0x4E71])
-    assert processor.step_clocks == 42  # the reset's total, between steps
+    assert processor.step_clocks == 40  # the reset's total, between steps
     processor.step()
     assert processor.step_clocks == 4
     with pytest.raises(AttributeError):
