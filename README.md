@@ -265,9 +265,14 @@ See [CPU state](docs/cpu-state.md), [disassembly](docs/disassembly.md),
 - Traces are versioned JSON Lines; `first_trace_divergence` and
   `first_session_divergence` stop at the first differing boundary of two
   files or two live machines, with every field named.
+- `python -m m68000_python.conformance trace|diff` runs a manifest (memory,
+  initial state, interrupt events, BERR ranges, replayed devices) on the
+  reference and diffs another core's trace against it, bus accesses
+  included: the kit and the certification ladder for a 68000 core in
+  another language.
 
-See [debug sessions](docs/debug-session.md), [trace comparison](docs/trace-comparison.md)
-and [the trace schema](docs/trace-schema.md).
+See [debug sessions](docs/debug-session.md), [trace comparison](docs/trace-comparison.md),
+[the trace schema](docs/trace-schema.md) and [conformance](docs/conformance.md).
 
 ## Development
 
@@ -308,6 +313,7 @@ in the document that records their result.
 - [Debug sessions](docs/debug-session.md)
 - [Trace comparison](docs/trace-comparison.md)
 - [Trace schema](docs/trace-schema.md)
+- [Conformance: proving another core is the same CPU](docs/conformance.md)
 - [Start here: 68000 primer](docs/start-here.md)
 - [Timing](docs/timing.md)
 - [Undocumented behaviour](docs/undocumented-behavior.md)

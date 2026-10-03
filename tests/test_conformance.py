@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from m68000_python import BoundaryKind, read_trace, write_trace
+from m68000_python import BoundaryKind, BusError, read_trace, write_trace
 from m68000_python.conformance import (
     ConformanceHost,
     load_manifest,
@@ -154,6 +154,38 @@ def test_a_bus_error_range_faults_reads_and_writes() -> None:
     # returns); the frame's seven writes are.
     assert all(access[1] != 0xF00000 for access in fault.accesses)
     assert sum(access[0] == "w" for access in fault.accesses) == 7
+
+
+def test_a_write_that_raises_a_bus_error_is_recorded() -> None:
+    # move.w D0, $f00000.l: tracking logs a write before making it, so the
+    # faulting write is in the record; the read case above is not.
+    document = _manifest(
+        "",
+        bus_error=[{"address": 0xF00000, "length": 2}],
+        memory=[{"address": 0x1000, "data": "33c000f00000"},
+                {"address": 8, "data": "00002000"},
+                {"address": 0x2000, "data": STOP}],
+    )  # fmt: skip
+    records, _ = _run(document)
+    assert records[0].after.pc == 0x2000
+    assert ("w", 0xF00000, 0, 2) in records[0].accesses
+
+
+def test_the_tas_write_under_each_mode() -> None:
+    """ "write": no callable, TAS's write is the tracked byte write (recorded).
+    "drop": the host's callable checks the BERR ranges, then discards the
+    write, and nothing is recorded.  In a manifest a TAS operand inside a
+    BERR range faults on its read, so the write's check is never reached."""
+    for mode in ("write", "drop"):
+        document = _manifest(STOP, tas_write=mode, bus_error=[{"address": 0x3000, "length": 2}])
+        host = ConformanceHost(manifest_from_dict(document))
+        if mode == "write":
+            assert host.cpu.tas_write is None
+            continue
+        with pytest.raises(BusError):
+            host.cpu.tas_write(0x3000, 0x80)
+        host.cpu.tas_write(0x3002, 0x80)
+        assert host.memory[0x3002] == 0
 
 
 def test_replay_windows_take_reads_from_the_stream_and_drop_writes() -> None:

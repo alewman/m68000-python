@@ -6,6 +6,20 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **The conformance kit**, `m68000_python.conformance` and
+  `python -m m68000_python.conformance trace|diff`, in z80-python's shape:
+  a versioned JSON manifest fixes the machine (16 MiB of flat RAM, reset or
+  an initial state, the acknowledge answers, BERR ranges, TAS's write
+  cycle, replayed device windows, `ipl` and `reset` events, stop rules); the
+  reference writes its trace with every bus access, and `diff` compares
+  another core's trace in lockstep. `examples/conformance/` holds three
+  programs and the interrupt and STOP scenarios as manifests with their
+  reference traces; `validation/lockstep.py export` writes the MAME runs as
+  replay manifests. docs/conformance.md has the certification ladder for a
+  port.
+
 ### Fixed
 
 - **The reset exception takes 40 clocks, not 42** (#3). `reset()` now
