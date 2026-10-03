@@ -21,6 +21,7 @@ sources and the tier of every oracle it leans on.
 | [debug-session.md](debug-session.md) | `DebugSession`, `CommandDebugger` and `python -m m68000_python`: stop reasons, records, watchpoints, targets, every command |
 | [trace-comparison.md](trace-comparison.md) | First-divergence comparison of two traces or two live sessions |
 | [trace-schema.md](trace-schema.md) | The JSON Lines trace format, version 1: every key, the state object, an example record, the comparison and versioning rules |
+| [conformance.md](conformance.md) | Proving a core in another language is the same CPU: the manifest, the one host (flat and replay), what must match, the committed example and interrupt manifests, the replayed MAME runs, and the five-step certification ladder |
 | [ai-assisted-development.md](ai-assisted-development.md) | How the core was built and why that is not the basis of its claim |
 | [releases/](releases/) | Release notes |
 

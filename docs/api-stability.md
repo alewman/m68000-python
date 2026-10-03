@@ -2,7 +2,8 @@
 
 `m68000-python` uses semantic versioning for the public names exported from
 the package root (`m68000_python.__all__`) and listed in each public
-module's `__all__` (`cpu`, `state`, `debug`, `trace`, `console`, `disasm`).
+module's `__all__` (`cpu`, `state`, `debug`, `trace`, `console`, `disasm`,
+`conformance`).
 
 ## Public contracts
 
@@ -43,7 +44,10 @@ The supported surface is:
   `write_trace`, `read_trace`, `iter_session_steps`, `compare_step_records`,
   `iter_trace_divergences`, `first_trace_divergence` and
   `first_session_divergence`, and the JSON Lines format of
-  [the trace schema](trace-schema.md).
+  [the trace schema](trace-schema.md); and
+- the conformance kit, `m68000_python.conformance`'s `__all__` and its
+  command line, and the manifest format and host behaviour of
+  [conformance](conformance.md) (`MANIFEST_SCHEMA_VERSION` 1).
 
 The package ships a `py.typed` marker, so these annotations are available to
 static type checkers. Public dataclass field names, enum values, function

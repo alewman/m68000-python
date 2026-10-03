@@ -320,7 +320,8 @@ def disassemble_bytes(data: bytes, address: int = 0) -> Instruction:
     """
     if len(data) % 2 or not data:
         raise ValueError("instruction data must be a non-empty whole number of words")
-    words = {address + i: (data[i] << 8) | data[i + 1] for i in range(0, len(data), 2)}
+    # Keyed by the 24-bit address the disassembler reads at: the bus has A23-A1 only.
+    words = {(address + i) & 0xFFFFFF: (data[i] << 8) | data[i + 1] for i in range(0, len(data), 2)}
 
     def read_word(where: int) -> int:
         if where not in words:

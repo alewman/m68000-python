@@ -2,6 +2,8 @@
 
     python validation/lockstep.py record genesis ROM.zip --seconds 20
     python validation/lockstep.py compare genesis ROM.zip [--limit N]
+    python validation/lockstep.py export genesis ROM.zip
+    python validation/lockstep.py follow genesis ROM.zip
 
 ``record`` runs MAME headless with ``lockstep.lua`` (docs/mame-oracle.md) in
 a fresh directory under ``validation/mame_runs/`` and leaves ``error.log``
@@ -13,6 +15,10 @@ instruction, that PC, SR, D0-D7, A0-A6, USP and SSP are MAME's.  An
 interrupt is recognised where MAME's next line is a handler entered with the
 mask raised; the host then asserts that level for one step, as the board's
 interrupt line does, and the core must arrive at the same place.
+``export`` runs the comparison and writes it as a conformance manifest for
+the ``replay`` host under the run's ``replay/`` (rung 3 of
+docs/conformance.md); ``follow`` measures how far that manifest, run on the
+replay host, stays on MAME's path.
 
 The host is here, not in the core (README, "The embedding contract").  Nothing it reads
 or writes is committed: ROMs stay where they are, traces under
@@ -23,11 +29,13 @@ from __future__ import annotations
 
 import argparse
 import collections
+import json
 import shutil
 import subprocess
 import sys
 import time
 import zipfile
+from dataclasses import fields
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -257,13 +265,17 @@ def difference(ours: dict[str, int], theirs: dict[str, int]) -> list[str]:
     return [f"{k}: core {ours[k]:X} MAME {theirs[k]:X}" for k in FIELDS if ours[k] != theirs[k]]
 
 
-def compare(board_name: str, rom_path: Path, trace: Path, limit: int | None) -> int:
+def compare(
+    board_name: str, rom_path: Path, trace: Path, limit: int | None, export: Export | None = None
+) -> int:
     board = BOARDS[board_name](load_rom(BOARDS[board_name], rom_path))
     cpu = M68000CPU(
         board.read_byte, board.read_word, board.write_byte, board.write_word,
         tas_write=board.tas_write,
     )  # fmt: skip
     cpu.reset()
+    if export is not None:
+        export.attach(board)
     count = interrupts = resets = 0
     clock_checked = clock_mismatches = clock_stalls = pending_clocks = 0
     previous_clock: int | None = None
@@ -295,6 +307,8 @@ def compare(board_name: str, rom_path: Path, trace: Path, limit: int | None) -> 
                 print(f"DIVERGENCE before the reset at record {count:,}")
                 return 1
             cpu.reset()
+            if export is not None:
+                export.restart()
             after = upcoming[0]
             for index in range(8):
                 cpu.R[index] = after[f"d{index}"]
@@ -314,12 +328,17 @@ def compare(board_name: str, rom_path: Path, trace: Path, limit: int | None) -> 
                 # instruction's accesses.
                 board.pending, leftover = leftover, []
                 cpu.set_ipl(level)
+                if export is not None:
+                    export.event("ipl", level)
                 try:
                     clocks_here += cpu.step()
                 except Divergence as error:
                     print(f"DIVERGENCE in the interrupt before {count:,}: {error}")
                     return 1
                 cpu.set_ipl(0)
+                if export is not None:
+                    export.steps += 1
+                    export.event("ipl", 0)
                 leftover = board.pending
                 interrupts += 1
                 ours = registers(cpu)
@@ -332,6 +351,10 @@ def compare(board_name: str, rom_path: Path, trace: Path, limit: int | None) -> 
                 print("   ", line)
             print("    last instructions:", *history[-8:], sep="\n      ")
             return 1
+        if export is not None and export.initial is None:
+            if "clock" in state:
+                cpu.clock = state["clock"]
+            export.initial = cpu.capture_state()
         if "clock" in state:
             if previous_clock is None:
                 cpu.clock = state["clock"]  # the E-clock phase follows MAME's count
@@ -369,6 +392,8 @@ def compare(board_name: str, rom_path: Path, trace: Path, limit: int | None) -> 
         except Divergence as error:
             print(f"DIVERGENCE in instruction {count:,} at {state['pc']:06X}: {error}")
             return 1
+        if export is not None:
+            export.steps += 1
         leftover = board.pending
         history.append(f"{state['pc']:06X}")
         count += 1
@@ -391,12 +416,143 @@ def compare(board_name: str, rom_path: Path, trace: Path, limit: int | None) -> 
         f"{board_name} {rom_path.name}: {count:,} instructions identical "
         f"({interrupts:,} interrupts, {resets:,} resets) in {elapsed:.0f} s"
     )
+    if export is not None:
+        export.write(board)
+    return 0
+
+
+class Export:
+    """What ``compare`` did, written as a conformance manifest for the ``replay`` host.
+
+    The board's device windows become ``replay.devices`` and every value the
+    core read from them, in order, the reads stream; the interrupt the
+    lockstep asserts for one step becomes an ``ipl`` event pair; the state
+    before the first instruction (its clock MAME's) is ``initial``.  A board
+    reset (altbeast's i8751 resets the CPU once, early) restarts the export:
+    the lockstep resynchronises the registers from MAME there, which no event
+    can express, so the manifest begins at the state after it.  The clock
+    resynchronisations after a board stall are not expressible either and
+    are left out.  The flat host also has no RAM mirror and stores
+    writes outside the windows, so the exported run follows the game only as
+    far as ``follow`` measures; for core-against-core equivalence that does
+    not matter, since both cores run the same machine (docs/conformance.md).
+    """
+
+    def __init__(self, directory: Path) -> None:
+        self.directory = directory
+        self.reads = bytearray()
+        self.events: list[dict] = []
+        self.steps = 0
+        self.initial = None
+
+    def restart(self) -> None:
+        """Forget everything so far: the run begins again after a board reset."""
+        self.reads.clear()
+        self.events.clear()
+        self.steps = 0
+        self.initial = None
+
+    def attach(self, board: Board) -> None:
+        expect = board._expect
+
+        def recording(kind: str, address: int, bits: int, value: int | None) -> int:
+            answer = expect(kind, address, bits, value)
+            if kind == "R":
+                self.reads += (answer & 0xFFFF).to_bytes(2, "big")
+            return answer
+
+        board._expect = recording
+
+    def event(self, kind: str, level: int | None = None) -> None:
+        item = {"at_step": self.steps, "kind": kind}
+        if kind == "ipl":
+            item["level"] = level
+        self.events.append(item)
+
+    def write(self, board: Board) -> None:
+        directory = self.directory
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "rom.bin").write_bytes(board.rom)
+        (directory / "reads.bin").write_bytes(bytes(self.reads))
+        state = self.initial
+        initial = {
+            name: list(value) if isinstance(value, tuple) else value
+            for name in (item.name for item in fields(state))
+            for value in (getattr(state, name),)
+        }
+        manifest = {
+            "version": 1,
+            "name": directory.name,
+            "host": "replay",
+            "memory": [{"address": 0, "file": "rom.bin"}],
+            "initial": initial,
+            "tas_write": "drop" if type(board).tas_write is not Board.tas_write else "write",
+            "replay": {
+                "devices": [{"address": board.read_window[0], "length": board.read_window[1]}],
+                "reads": {"file": "reads.bin"},
+            },
+            "events": self.events,
+            "stop": {"max_steps": self.steps, "on_idle": False},
+        }
+        (directory / "manifest.json").write_text(json.dumps(manifest, indent=1) + "\n")
+        print(
+            f"exported {directory / 'manifest.json'}: {self.steps:,} records, "
+            f"{len(self.reads) // 2:,} replayed reads, {len(self.events):,} events"
+        )
+
+
+def follow(trace: Path, manifest_path: Path) -> int:
+    """Run an exported manifest on the replay host and count how long it stays on MAME's path.
+
+    MAME's lines are skipped until one matches the manifest's initial state
+    (an export begins after a board reset); then, before every instruction
+    boundary, the registers are compared with MAME's line, as ``compare``
+    compares them.  Interrupt boundaries are not lines of MAME's.
+    """
+    from m68000_python.conformance import ConformanceHost, _apply_event, load_manifest
+    from m68000_python.debug import BoundaryKind, next_boundary
+
+    manifest = load_manifest(manifest_path)
+    host = ConformanceHost(manifest)
+    cpu = host.cpu
+    events = list(manifest.events)
+    steps = followed = 0
+    started = time.perf_counter()
+    stream = records(trace)
+    start = registers(cpu)
+    skipped = 0
+    upcoming = next(stream, None)
+    while upcoming is not None and not same(start, upcoming[0]):
+        upcoming = next(stream, None)
+        skipped += 1
+    while upcoming is not None and steps < manifest.stop.max_steps:
+        state, _ = upcoming
+        upcoming = next(stream, None)
+        while True:
+            while events and events[0].at_step == steps:
+                _apply_event(cpu, events.pop(0))
+            if next_boundary(cpu.capture_state()) is BoundaryKind.INSTRUCTION:
+                break
+            cpu.step()
+            steps += 1
+        if not same(registers(cpu), state):
+            print(f"left MAME's path before instruction {followed:,} (record {steps:,}):")
+            for line in difference(registers(cpu), state):
+                print("   ", line)
+            break
+        followed += 1
+        cpu.step()
+        steps += 1
+    print(
+        f"{manifest.name}: from MAME's line {skipped:,}, on MAME's path for {followed:,} "
+        f"instructions ({steps:,} records) in {time.perf_counter() - started:.0f} s"
+    )
     return 0
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("action", choices=("record", "compare"))
+    parser.add_argument("action", choices=("record", "compare", "export", "follow"))
     parser.add_argument("board", choices=sorted(BOARDS))
     parser.add_argument(
         "rom", type=Path, nargs="?", help="cartridge (genesis); altbeast uses its romset"
@@ -410,7 +566,12 @@ def main() -> int:
     if args.action == "record":
         record(args.board, args.rom, args.seconds, args.tag)
         return 0
-    trace = run_directory(args.board, args.rom, args.tag) / "error.log"
+    directory = run_directory(args.board, args.rom, args.tag)
+    trace = directory / "error.log"
+    if args.action == "export":
+        return compare(args.board, args.rom, trace, args.limit, Export(directory / "replay"))
+    if args.action == "follow":
+        return follow(trace, directory / "replay" / "manifest.json")
     return compare(args.board, args.rom, trace, args.limit)
 
 

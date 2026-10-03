@@ -116,3 +116,12 @@ def test_spelling_matches_mame_on_real_code(address: int, data: bytes, text: str
     rung 4); this checks the same spelling without MAME or the ROMs.
     """
     assert disassemble_bytes(data, address).text == text
+
+
+def test_bytes_at_an_address_above_24_bits_decode_like_its_24_bit_alias() -> None:
+    # A jump through a sign-extended short address leaves PC at $FFFFxxxx;
+    # the bus sees A23-A1 only, so the words are read at the masked address.
+    # Genesis Altered Beast runs code at $FFFFF200 (the conformance replay).
+    instruction = disassemble_bytes(bytes.fromhex("4bf900c00004"), 0xFFFFF200)
+    assert instruction.text == "lea $c00004.l, A5"
+    assert instruction.address == 0xFFFFF200
