@@ -38,14 +38,13 @@ jobs:
           path: tests/68000_test_vectors/680x0
           key: 680x0-e0d5ece9670205cc84a0101081837deb446f86a3
       - name: Fetch what the caches did not hold
-        # A restored cache missing its REVISION marker (or the 680x0 corpus'
-        # own completeness check) is incomplete, not merely absent -- an
-        # interrupted fetch cached by a prior run would otherwise leave the
-        # fetch script's own "directory exists" guard permanently tripped,
-        # since a cache entry's contents cannot be overwritten once saved
-        # under its key. Clear an incomplete directory before refetching so
-        # this step stays idempotent regardless of what an earlier run left
-        # behind.
+        # The two corpora cache separately, so one can be present while the
+        # other is not -- and the 680x0 cache has never once hit here. Using
+        # --with-680x0 for the second line (as this step used to) asks the
+        # script to fetch m68000 *and* 680x0 together; since m68000 was
+        # already there, that call's own fetch_m68000() immediately hit the
+        # script's "directory exists" guard, every single run. --680x0-only
+        # fetches just the corpus this step actually still needs.
         run: |
           test -f tests/68000_test_vectors/m68000/REVISION || {
             rm -rf tests/68000_test_vectors/m68000
@@ -53,7 +52,7 @@ jobs:
           }
           test -d tests/68000_test_vectors/680x0/68000/v1 || {
             rm -rf tests/68000_test_vectors/680x0
-            python scripts/fetch_test_vectors.py --with-680x0
+            python scripts/fetch_test_vectors.py --680x0-only
           }
 
       - name: The decoder against MAME 0.285's m68000.lst, word for word

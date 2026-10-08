@@ -11,6 +11,12 @@ pytest; run this script once. See docs/validation.md for the tiers.
                                                         # sparse: named files only
     python scripts/fetch_test_vectors.py --with-680x0   # also the older Harte
                                                         # corpus (no license file)
+    python scripts/fetch_test_vectors.py --680x0-only   # just the Harte corpus,
+                                                        # for a host that already
+                                                        # has m68000 (oracles.yml:
+                                                        # the two corpora cache
+                                                        # separately, so a host can
+                                                        # hold one without the other)
 
 The archive URLs are derived from the pinned revisions so a corpus can never
 be substituted from a moving branch. GitHub publishes no checksum for the
@@ -197,10 +203,17 @@ def main() -> int:
     parser.add_argument(
         "--with-680x0", action="store_true", help="also fetch the Harte 680x0 corpus"
     )
+    parser.add_argument(
+        "--680x0-only",
+        action="store_true",
+        dest="h680x0_only",
+        help="fetch only the Harte 680x0 corpus, not m68000 (for a host that already has it)",
+    )
     args = parser.parse_args()
     try:
-        fetch_m68000([f.strip() for f in args.files.split(",")] if args.files else None)
-        if args.with_680x0:
+        if not args.h680x0_only:
+            fetch_m68000([f.strip() for f in args.files.split(",")] if args.files else None)
+        if args.with_680x0 or args.h680x0_only:
             fetch_680x0()
     except (OSError, RuntimeError, tarfile.TarError) as error:
         print(f"fetch failed: {error}", file=sys.stderr)
