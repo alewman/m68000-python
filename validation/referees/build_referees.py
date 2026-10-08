@@ -224,9 +224,20 @@ def build_musashi() -> Path:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("referees", nargs="*", choices=["winuae", "musashi"], default=[])
+    # Not choices=["winuae", "musashi"]: argparse's own validation of a
+    # nargs='*' positional against its default empty list is broken on
+    # Python 3.11 (checked: reproduces under PyPy 3.11.15's argparse, not
+    # under CPython 3.14) -- it raises "invalid choice: []" for zero
+    # arguments, rather than validating per element. Validated by hand below
+    # instead, which works the same on every version.
+    parser.add_argument("referees", nargs="*", default=[])
     parser.add_argument("--clean", action="store_true")
     args = parser.parse_args()
+    for name in args.referees:
+        if name not in ("winuae", "musashi"):
+            parser.error(
+                f"argument referees: invalid choice: {name!r} (choose from 'winuae', 'musashi')"
+            )
     if args.clean and BUILD.exists():
         shutil.rmtree(BUILD)
     for name in args.referees or ["winuae", "musashi"]:
