@@ -6,33 +6,7 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Added
-
-- **The conformance kit**, `m68000_python.conformance` and
-  `python -m m68000_python.conformance trace|diff`, in z80-python's shape:
-  a versioned JSON manifest fixes the machine (16 MiB of flat RAM, reset or
-  an initial state, the acknowledge answers, BERR ranges, TAS's write
-  cycle, replayed device windows, `ipl` and `reset` events, stop rules); the
-  reference writes its trace with every bus access, and `diff` compares
-  another core's trace in lockstep. `examples/conformance/` holds three
-  programs and the interrupt and STOP scenarios as manifests with their
-  reference traces; `validation/lockstep.py export` writes the MAME runs as
-  replay manifests. docs/conformance.md has the certification ladder for a
-  port.
-
-### Fixed
-
-- **The reset exception takes 40 clocks, not 42** (#3). `reset()` now
-  spends 14 internal clocks before reading the SSP vector, not 16, so it
-  returns 40, as UM Table 8-14 prints (40(6/0)), and every access of the
-  reset starts 2 clocks earlier. The 14 are measured: Nuked-MD's gate-level
-  68000 (built from die photographs) reads the SSP vector 14 clocks after
-  RESET is released, and the rest of the reset at the core's clocks. A host
-  whose timing counts from `reset()` sees every later clock 2 lower, which
-  moves the E-clock phase of autovectored interrupts. docs/claims.md moves
-  the reset total from "Undecidable here" to "Provisional".
-
-## [0.1.0] — unreleased
+## [0.1.0] — 2026-10-09
 
 The first release: the whole 68000 instruction set and exception model,
 verified up a ladder of oracles ordered by tier, with a claim boundary for
@@ -88,6 +62,17 @@ what no available evidence settles.
   interpreters, a wheel build and installed-API smoke test) and a weekly
   Oracles workflow that rebuilds the referees and fails when any recorded
   number moves.
+- **The conformance kit**, `m68000_python.conformance` and
+  `python -m m68000_python.conformance trace|diff`, in z80-python's shape:
+  a versioned JSON manifest fixes the machine (16 MiB of flat RAM, reset or
+  an initial state, the acknowledge answers, BERR ranges, TAS's write
+  cycle, replayed device windows, `ipl` and `reset` events, stop rules); the
+  reference writes its trace with every bus access, and `diff` compares
+  another core's trace in lockstep. `examples/conformance/` holds three
+  programs and the interrupt and STOP scenarios as manifests with their
+  reference traces; `validation/lockstep.py export` writes the MAME runs as
+  replay manifests. docs/conformance.md has the certification ladder for a
+  port.
 
 ### Changed
 
@@ -107,6 +92,26 @@ Each as a failing test first, then the fix:
   core's internal exception escape from `reset()`; it is a double bus fault
   and the processor halts (UM 5.4.4). Found by the polish round's coverage
   check of the refills, 2026-09-25.
+- **The reset exception takes 40 clocks, not 42** (#3). `reset()` now
+  spends 14 internal clocks before reading the SSP vector, not 16, so it
+  returns 40, as UM Table 8-14 prints (40(6/0)), and every access of the
+  reset starts 2 clocks earlier. The 14 are measured: Nuked-MD's gate-level
+  68000 (built from die photographs) reads the SSP vector 14 clocks after
+  RESET is released, and the rest of the reset at the core's clocks. A host
+  whose timing counts from `reset()` sees every later clock 2 lower, which
+  moves the E-clock phase of autovectored interrupts. docs/claims.md moves
+  the reset total from "Undecidable here" to "Provisional".
+- The weekly Oracles workflow itself had never once run to completion
+  since it was written: `fetch_test_vectors.py --with-680x0` fetches both
+  corpora, not 680x0 alone, so the workflow's second fetch call re-tried
+  m68000 every run and hit its own "already exists" guard; and
+  `build_referees.py`'s argument parser raised on zero arguments under
+  Python 3.11's argparse (`nargs='*'` with `choices=` validated the empty
+  default list itself, not each element -- absent on CPython 3.14). Fixed
+  with a `--680x0-only` fetch mode and by validating choices by hand.
+  First clean run, 2026-10-08: every recorded number (the 680x0 classifier,
+  both referee calibrations, coverage, mutation) matches this record
+  exactly.
 
 In the verification rounds before this release:
 
