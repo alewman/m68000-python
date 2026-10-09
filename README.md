@@ -15,7 +15,7 @@ the family's reference core. Where z80-python could be checked exhaustively
 against hardware-captured values, no such oracle exists for the 68000, so
 this core carries a **claim boundary** instead: every behaviour is labelled
 by how many independent lines of evidence support it and how close to
-silicon the best of them is ([docs/claims.md](docs/claims.md)).
+silicon the best of them is ([docs/claims.md](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/claims.md)).
 
 The project is deliberately:
 
@@ -37,7 +37,7 @@ The project is deliberately:
 
 Each oracle is named with its tier: where its expected values came from. A
 lower tier detects; the highest tier that checks a claim decides it
-([oracle tiers](docs/validation.md#the-tier-rule)). The core passes:
+([oracle tiers](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/validation.md#the-tier-rule)). The core passes:
 
 - **hardware-captured:** every input of flamewing's 68k BCD verifier tables,
   **525,312 cases** of `ABCD`, `SBCD` and `NBCD` recorded on two Sega Genesis
@@ -46,7 +46,7 @@ lower tier detects; the highest tier that checks a claim decides it
   author corrects against real Amigas with `cputest`, built here from a
   pinned commit and run over the whole gate: **308,416 of 314,988** judged
   cases agree, and every residual is an address-error or 2-clock difference
-  listed by name ([docs/referees.md](docs/referees.md));
+  listed by name ([docs/referees.md](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/referees.md));
 - **emulator-derived, the gate:** all **127 files, 317,500 cases** of the
   pinned SingleStepTests/m68000 corpus, generated from MAME's
   microcode-transcribed core, compared on registers, SR, both stack
@@ -71,14 +71,14 @@ lower tier detects; the highest tier that checks a claim decides it
 Where the sources disagree the core follows the gate and the claim is
 **contested**: six address-error behaviours, three 2-clock questions and
 the double bus fault. Each is listed with what
-would settle it ([docs/claims.md](docs/claims.md)). The order of bus cycles
+would settle it ([docs/claims.md](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/claims.md)). The order of bus cycles
 and the exact clock totals rest on MAME's lineage alone, and the pages say so.
 
 What the evidence reaches is mapped: the suite executes all 45,815 defined
-first words ([docs/coverage.md](docs/coverage.md)), and of 176 seeded
+first words ([docs/coverage.md](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/coverage.md)), and of 176 seeded
 mutants it kills 174, the two survivors provably equivalent
-([docs/mutation.md](docs/mutation.md)). Exact revisions, hashes, commands
-and timings are in [the validation record](docs/validation.md).
+([docs/mutation.md](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/mutation.md)). Exact revisions, hashes, commands
+and timings are in [the validation record](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/validation.md).
 
 This is an instruction-level semantic and lifecycle claim. It is **not** a
 claim of cycle-accurate bus-pin behaviour, of wait states, or of a complete
@@ -95,7 +95,7 @@ The two badges cover different things, and neither covers everything:
 
 **The MAME lockstep is certified locally, not in CI.** It needs MAME 0.285
 and the ROMs; its command lines, counts and timings are in
-[the validation record](docs/validation.md).
+[the validation record](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/validation.md).
 
 ## Vibe coded, oracle validated
 
@@ -107,12 +107,12 @@ plausible and wrong, above all around the prefetch queue, address-error
 frames and undefined flags; the feedback loop was made stronger than the
 model's confidence, and four core bugs the gate could not see were found by
 the coverage work and the referees and fixed as failing tests first. See
-[AI-assisted development](docs/ai-assisted-development.md).
+[AI-assisted development](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/ai-assisted-development.md).
 
 ## Version status
 
-The current release is **`0.1.0`** (see its [release note](docs/releases/0.1.0.md)
-and the [changelog](CHANGELOG.md)).
+The current release is **`0.1.0`** (see its [release note](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/releases/0.1.0.md)
+and the [changelog](https://github.com/alewman/m68000-python/blob/v0.1.0/CHANGELOG.md)).
 
 ### Install from PyPI
 
@@ -183,14 +183,14 @@ the RESET instruction's pulse. A host raises `BusError` from a callable to
 assert BERR. Inside a callable, `cpu.step_clocks` says at which clock of the
 step the access ends, which a board needs to stall the CPU at the right
 point; the core models no wait states, so the host adds its own stall
-clocks to the total. [The interrupt lifecycle](docs/interrupt-lifecycle.md)
+clocks to the total. [The interrupt lifecycle](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/interrupt-lifecycle.md)
 has the whole host protocol.
 
 Speed, on the `base` workload of `benchmarks/m68000_core_benchmark.py`
 (2026-09-25, a shared machine at load 12): about 1.4 million instructions
 per second on CPython 3.14.4 and about 33 million on PyPy 7.3.20; a Mega
 Drive's 68000 executes about 1 million a second. The four workloads and the
-polish round's speed ladder are in [the validation record](docs/validation.md#speed).
+polish round's speed ladder are in [the validation record](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/validation.md#speed).
 
 ## Reference-core boundary
 
@@ -225,11 +225,11 @@ Accordingly, the project does not claim:
 - a complete arcade board, console or computer.
 
 These are scope boundaries, not unfinished promises; the claim boundary in
-[docs/claims.md](docs/claims.md) is exact about each.
+[docs/claims.md](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/claims.md) is exact about each.
 
 ## Learning and inspection
 
-New to the 68000? Read [Start here](docs/start-here.md) first: the register
+New to the 68000? Read [Start here](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/start-here.md) first: the register
 file, the status register, how an opcode word splits into fields, the twelve
 effective-address modes, the exception model and the prefetch queue, each
 section naming the module that implements it.
@@ -250,9 +250,9 @@ spelling, checked against MAME's own disassembly of 1,300 instructions of
 real game code. Disassembly requires an explicit side-effect-free word
 reader: debugging must not accidentally acknowledge a device.
 
-See [CPU state](docs/cpu-state.md), [disassembly](docs/disassembly.md),
-[undocumented behaviour](docs/undocumented-behavior.md) and
-[timing](docs/timing.md).
+See [CPU state](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/cpu-state.md), [disassembly](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/disassembly.md),
+[undocumented behaviour](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/undocumented-behavior.md) and
+[timing](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/timing.md).
 
 ## Diagnostics and tooling
 
@@ -271,8 +271,8 @@ See [CPU state](docs/cpu-state.md), [disassembly](docs/disassembly.md),
   included: the kit and the certification ladder for a 68000 core in
   another language.
 
-See [debug sessions](docs/debug-session.md), [trace comparison](docs/trace-comparison.md),
-[the trace schema](docs/trace-schema.md) and [conformance](docs/conformance.md).
+See [debug sessions](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/debug-session.md), [trace comparison](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/trace-comparison.md),
+[the trace schema](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/trace-schema.md) and [conformance](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/conformance.md).
 
 ## Development
 
@@ -300,27 +300,27 @@ in the document that records their result.
 
 ## Project records
 
-- [The claim boundary](docs/claims.md): every behaviour with its status
-- [0.1.0 release notes](docs/releases/0.1.0.md)
-- [Validation evidence and scope](docs/validation.md)
-- [Referees: WinUAE and Musashi, built and run](docs/referees.md)
-- [Coverage: what the evidence reaches](docs/coverage.md)
-- [Mutation: what the suite would notice](docs/mutation.md)
-- [Public API stability](docs/api-stability.md)
-- [Interrupt lifecycle](docs/interrupt-lifecycle.md)
-- [CPU state](docs/cpu-state.md)
-- [Disassembly](docs/disassembly.md)
-- [Debug sessions](docs/debug-session.md)
-- [Trace comparison](docs/trace-comparison.md)
-- [Trace schema](docs/trace-schema.md)
-- [Conformance: proving another core is the same CPU](docs/conformance.md)
-- [Start here: 68000 primer](docs/start-here.md)
-- [Timing](docs/timing.md)
-- [Undocumented behaviour](docs/undocumented-behavior.md)
-- [MAME as a trace oracle](docs/mame-oracle.md)
-- [AI-assisted development](docs/ai-assisted-development.md)
-- [Contribution guidance](CONTRIBUTING.md)
-- [History: the handoff brief and the worklog](docs/README.md)
+- [The claim boundary](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/claims.md): every behaviour with its status
+- [0.1.0 release notes](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/releases/0.1.0.md)
+- [Validation evidence and scope](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/validation.md)
+- [Referees: WinUAE and Musashi, built and run](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/referees.md)
+- [Coverage: what the evidence reaches](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/coverage.md)
+- [Mutation: what the suite would notice](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/mutation.md)
+- [Public API stability](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/api-stability.md)
+- [Interrupt lifecycle](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/interrupt-lifecycle.md)
+- [CPU state](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/cpu-state.md)
+- [Disassembly](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/disassembly.md)
+- [Debug sessions](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/debug-session.md)
+- [Trace comparison](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/trace-comparison.md)
+- [Trace schema](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/trace-schema.md)
+- [Conformance: proving another core is the same CPU](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/conformance.md)
+- [Start here: 68000 primer](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/start-here.md)
+- [Timing](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/timing.md)
+- [Undocumented behaviour](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/undocumented-behavior.md)
+- [MAME as a trace oracle](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/mame-oracle.md)
+- [AI-assisted development](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/ai-assisted-development.md)
+- [Contribution guidance](https://github.com/alewman/m68000-python/blob/v0.1.0/CONTRIBUTING.md)
+- [History: the handoff brief and the worklog](https://github.com/alewman/m68000-python/blob/v0.1.0/docs/README.md)
 
 ## License
 
