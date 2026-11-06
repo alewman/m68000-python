@@ -6,6 +6,13 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- A CPU unpickled in a process that had not constructed one failed its first
+  `step` (`AttributeError: _table`): the dispatch table was built in `__init__`,
+  which unpickling skips. It is now built the first time a class reads it, per
+  class as before.
+
 ## [0.1.0] — 2026-10-09
 
 The first release: the whole 68000 instruction set and exception model,
