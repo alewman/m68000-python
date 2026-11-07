@@ -1,5 +1,9 @@
 """The opcode map: every first word decodes to exactly one handler."""
 
+import os
+import pickle
+import subprocess
+import sys
 from collections import Counter
 
 from m68000_python import M68000CPU
@@ -37,6 +41,32 @@ def test_table_is_built_once_per_class() -> None:
     second = _cpu()
     assert first._table is second._table
     assert len(first._table) == 0x10000
+
+
+def test_a_subclass_gets_its_own_table() -> None:
+    class Traced(M68000CPU):
+        pass
+
+    assert _cpu()._table is not Traced._table
+    assert "_table" in Traced.__dict__ and len(Traced._table) == 0x10000
+
+
+def test_an_unpickled_cpu_runs_in_a_new_process() -> None:
+    # A process that unpickles a CPU never runs __init__; the table must still come.
+    cpu = _cpu()  # memory all zero: ORI.B #0,D0 at every address
+    cpu.reset()
+    data = pickle.dumps(cpu)
+    script = (
+        "import pickle, sys\n"
+        "cpu = pickle.loads(sys.stdin.buffer.read())\n"
+        "for _ in range(3):\n"
+        "    cpu.step()\n"
+    )
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)}
+    done = subprocess.run(
+        [sys.executable, "-c", script], input=data, env=env, capture_output=True, check=False
+    )
+    assert done.returncode == 0, done.stderr.decode()
 
 
 def test_known_words() -> None:

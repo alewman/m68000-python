@@ -42,6 +42,18 @@ from m68000_python._system import SystemMixin
 from m68000_python.state import CPUState
 
 
+class _LazyTable:
+    """``M68000CPU._table`` until first read: builds the reading class's table and puts
+    it in that class's own ``__dict__`` in place of itself, so later reads are a plain
+    attribute. Every subclass gets its own (``__init_subclass__``), since a subclass's
+    handlers may differ."""
+
+    def __get__(self, cpu: object, owner: type) -> list[Handler]:
+        table = build_table(owner)
+        owner._table = table  # type: ignore[attr-defined]
+        return table
+
+
 class M68000CPU(
     ALUMixin,
     BCDMixin,
@@ -82,7 +94,14 @@ class M68000CPU(
     A host raises :class:`BusError` from any bus callable to assert BERR.
     """
 
-    _table: list[Handler]
+    #: The dispatch table, built for each class the first time it is read (so an
+    #: unpickled CPU, which never runs ``__init__``, gets it too); then a plain list.
+    _table: list[Handler] = _LazyTable()  # type: ignore[assignment]
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        super().__init_subclass__(**kwargs)
+        if "_table" not in cls.__dict__:  # its own handlers, unless it brings a table
+            cls._table = _LazyTable()  # type: ignore[assignment]
 
     def __init__(
         self,
@@ -115,9 +134,6 @@ class M68000CPU(
             address_error,
             reset_devices,
         )
-        cls = type(self)
-        if "_table" not in cls.__dict__:
-            cls._table = build_table(cls)
 
     # -- state capture and restore (docs/cpu-state.md) --------------------------
 
