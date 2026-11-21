@@ -1,0 +1,411 @@
+# Undocumented behavior: undefined on paper, deterministic on silicon
+
+The Programmer's Reference Manual marks a handful of results "undefined"
+(PRM Table 3-18 uses `U`; UM 6.2.5 says "unpredictable"). The silicon does
+one specific thing in each case, real programs occasionally depend on it,
+and every oracle in [validation](validation.md) has to take a position. This
+page lists each behavior, what each source says it is, the tier of the
+evidence, and where in `src/m68000_python/` it is encoded, so a handler's
+comment can point at a line here and a reader can go from the rule to the
+code. Where only inference is available the item is marked `[unverified]`;
+where an emulator's choice is the only account, it says so.
+
+Tiers (from [validation](validation.md)): **T1** hardware-captured, **T2**
+hardware-corrected emulator, **T3** emulator-derived. A T3 source can raise
+a question; it cannot settle one.
+
+Sources named on this page, with licenses:
+
+- **WinUAE** (Toni Wilen and the UAE authors; GPL-2.0+),
+  <https://github.com/tonioni/WinUAE>: **closed box only** (the family's
+  sources register). Its CPU tester's 68000 core is built and run here as a
+  referee, through a separate GPL tool ([referees](referees.md)); what the
+  run gives is tagged **OBSERVED** (closed box, WinUAE `1977af50`). Its
+  readme and changelog are its author's prose about the tester's runs on
+  real Amigas (readme: "68000: Complete. Including bus and address error
+  stack frame/register/CCR modification undocumented behavior. Full cycle
+  count support."), which is why this page ranks its 68000 branch **T2**;
+  under the owner's ruling of 2026-11-19 those statements are hardware
+  facts only once the hardware runs they refer to are found, so until then
+  the T2 rows below rest on the closed-box run. Parts of WinUAE's source
+  were read while this page was first written (before 2026-09-21); the
+  code fragments and function names then quoted were removed on
+  2026-11-19 and the behaviour is stated in prose.
+- **Musashi** `m68k_in.c` (Karl Stenerud; MIT per `readme.txt`; `master`
+  at `313ebf1`, 2026-03-08), <https://github.com/kstenerud/Musashi>. Pure
+  emulator, **T3**; it is the core MAME used before 2023 and the one many
+  arcade emulators still use.
+- **MAME 0.285** microcoded core (Olivier Galibert; introduced in commit
+  `74971c2`, 2023-02-22, "New implementation, generated from the
+  micro/nanocode"). **Run, never read**: its `m68000.cpp` and `m68000.h`
+  are BSD-3-Clause, but the generator `m68000gen.py`, the listing
+  `m68000.lst` and the generated handlers carry no licence header and so
+  are GPL-2.0+ under MAME's COPYING (found 2026-11-19; the 2026-09 build
+  read them, docs/provenance.md). It reaches this page through the
+  SingleStepTests/m68000 corpus (MIT), which it generated, and the lockstep.
+  Still an emulator, so **T3**, but one whose undefined results come from
+  the chip's microcode rather than an author's choice.
+- **flamewing/68k-bcd-verifier** (GPL-3.0, commit `39a01be`, 2018-08-31):
+  exhaustive ABCD/SBCD/NBCD tables captured from a Model 1 Sega Genesis and
+  confirmed on a Model 3 VA2. **T1**.
+- **SingleStepTests/m68000** (MIT) and **SingleStepTests/680x0** (no
+  license): the corpora, T3, pinned in [validation](validation.md).
+- **PRM** and **UM**: the Motorola manuals cited in [start-here](start-here.md).
+
+## Flags after DIVU overflow
+
+`_alu.py`, `_op_divu`; the trap path is `_system.py`, `_divide_by_zero`.
+
+PRM: N and Z "undefined if overflow or divide by zero occurs"; V set; C
+cleared (PRM 4, DIVU). Overflow means the quotient does not fit in 16 bits;
+the destination register is unchanged.
+
+| Source | Tier | 68000 result |
+| --- | --- | --- |
+| WinUAE tester core, run | OBSERVED (T2) | `V=1, N=1, Z=0, C=0`: no SR disagreement with the corpus on any judged DIVU case (`calibrate.py`) |
+| Musashi `divu` | T3 | `V=1`; N, Z, C **unchanged** |
+| m68000 corpus (MAME's microcoded core, run) | T3 | `V=1, N=1, Z=0, C=0` on every overflowing case of `DIVU.json.bin` |
+
+WinUAE's release notes (3.6.0, 2018-01-18) describe the 68020+ variants as
+newly emulated and the 68000 as already correct ("N is also always set").
+The m68000 corpus has no divide-by-zero case (its issue #3). The trap
+path's flags were read from WinUAE's changelog (4.3.0: "DIVU sets Z-flag if
+dividend upper word is zero, N-flag if dividend upper word is negative") and
+then settled by running WinUAE's tester core on 2026-09-21
+([referees](referees.md)): N from bit 31 of the dividend, Z if its upper
+word is zero, V and C clear, X kept. **OBSERVED** (closed box, inside
+cputest's checked scope); pinned by `tests/test_referee_evidence.py`. The
+core's rule was rewritten on 2026-11-19 from those recorded run results
+alone (its first version had been written from WinUAE's source); the
+owner's ruling on resting this case on a closed-box run is pending
+([provenance](provenance.md)). PRM Table 3-18 defines only C (cleared).
+
+## Flags after DIVS overflow
+
+`_alu.py`, `_op_divs`; the clocks are `divide_signed_clocks` there.
+
+| Source | Tier | 68000 result |
+| --- | --- | --- |
+| WinUAE tester core, run | OBSERVED (T2) | `V=1, N=1, Z=0, C=0`: no SR disagreement with the corpus on any judged DIVS case (`calibrate.py`) |
+| Musashi `divs` | T3 | `V=1`, others unchanged; special-cases `$80000000 / -1` as quotient 0 with **Z=1, N=V=C=0** and writes 0 to the register, which no other source does |
+| m68000 corpus, clocks | T3 | an overflow of the magnitudes (\|dividend\| >> 16 ≥ \|divisor\|) ends early at 16 or 18 clocks; a quotient that only proves out of range at the end takes the full 120–156 (the FITTED rule in `_alu.py`, [timing](timing.md)) |
+
+Divide by zero: "DIVS always sets Z-flag" per WinUAE's changelog (4.3.0 in
+the pinned `od-win32/winuaechangelog.txt`). **Run 2026-09-21:** WinUAE's
+CPU-tester core, built from `1977af5` and run on DIVU and DIVS by zero
+([referees](referees.md)), gives DIVS: Z set, N V C clear; DIVU: N from bit
+31 of the dividend, Z if its upper word is zero, V C clear; X kept.
+**OBSERVED** (closed box, inside cputest's checked scope); pinned by
+`tests/test_referee_evidence.py`, which is what kills mutant D10
+([mutation](mutation.md)). Musashi (T3, run) leaves every flag. The
+SingleStepTests/680x0 detector has one DIVU-by-zero case (`80ef [DIVU (d16,
+A7), D0] 5745`) and records N clear where this rule sets it: written down,
+not followed (a detector, T3, no licence).
+
+## Flags after CHK
+
+`_system.py`, `_op_chk`.
+
+PRM: N set if Dn < 0, cleared if Dn > bound, "undefined otherwise"; Z, V, C
+undefined (PRM 4, CHK).
+
+| Source | Tier | 68000 result |
+| --- | --- | --- |
+| WinUAE tester core, run | OBSERVED (T2) | V and C clear, Z set when Dn = 0, N set when Dn < 0, on every path, trap or not |
+| Musashi `chk` | T3 | `Z=(Dn==0); V=C=0` always; `N=(Dn<0)` only when trapping, unchanged otherwise |
+
+The two agree on trap paths and differ on the non-negative, in-range path
+(N cleared vs. unchanged). WinUAE is the higher tier, and running its tester
+core (2026-09-21, [referees](referees.md)) confirmed the core's rule on every
+gate case and on Dn = 0, a corner no corpus has (T2 by running; pinned). The
+stacked PC for the CHK trap is the next instruction (UM 6.3.5).
+
+## ABCD, SBCD, NBCD: N and V
+
+`_bcd.py`, `decimal_add` and `decimal_subtract`; the gate is `tests/test_bcd.py`.
+
+PRM Table 3-18: X and C are the decimal carry/borrow, Z is sticky, N and V
+are `U`. The T1 source is flamewing's exhaustive verifier, whose expected
+tables were captured from a Model 1 Genesis; emulators that pass it
+(BlastEm, Genesis Plus GX, Higan, BizHawk, Exodus, Mednafen per its README)
+and WinUAE (3.6.0 notes: "68000 was already correct") all implement:
+
+- **N** = bit 7 of the corrected result.
+- **V** for `ABCD`: set when bit 7 of the *uncorrected* binary sum was 0 and
+  bit 7 of the *corrected* result is 1 (the +6 / +$60 adjustment carried
+  into the sign). Musashi writes exactly this as `FLAG_V = ~res` before the
+  correction and `FLAG_V &= res` after.
+- **V** for `SBCD` and `NBCD`: the mirror image, set when the correction
+  turned bit 7 from 1 to 0. Musashi: `FLAG_V = res` then `FLAG_V &= ~res`.
+- **Z** for `NBCD` of 0 with X clear: Musashi treats result `$9A` (meaning
+  no adjustment needed, operand was 0) as a special case that leaves Z
+  sticky and clears X, C, V.
+
+Only the *rule* above is T1-backed (the verifier's tables are the rule
+evaluated over all 262,144 inputs per instruction); the description of it
+in terms of an uncorrected intermediate is Musashi's, `[unverified]` as a
+mechanism but not as a result.
+
+## MOVEM with the address register in its own list
+
+`_loads.py`, `_op_movem`.
+
+Documented, not undocumented, but every core gets it wrong once (PRM 4,
+MOVEM, "Description"):
+
+- **Predecrement, register to memory**: "The MC68000 and MC68010 write the
+  initial register value (not decremented)"; the 68020 and later write the
+  decremented value.
+- **Postincrement, memory to register**: "If the addressing register is also
+  loaded from memory, the memory value is ignored and the register is
+  written with the postincremented effective address."
+- **Memory to register reads one extra word** past the last register in the
+  list (the Table 8-10 read counts of `3+n` carry it; both corpora record
+  the transaction, and the gate's four `MOVEM` files check it on every
+  case). PRM does not mention it; the corpora and WinUAE do. Bus order is
+  outside what cputest checks on hardware, so this is T3.
+
+The mask word is bit 0 = D0 … bit 15 = A7 for every mode except
+predecrement, where it is reversed (bit 0 = A7 … bit 15 = D0), so the
+registers land in memory in the same order either way (PRM 4, MOVEM).
+
+## Odd addresses
+
+`_core.py`: the odd-address check in each bus helper, `_commit_pc` (the
+stacked PC), `_group_zero` (the frame); the mode-specific commit points are
+in `_ea.py` and the handlers.
+
+Word and long operand accesses, and any instruction fetch, at an odd
+address raise an address error (UM 6.3.10). What is deterministic but not
+documented:
+
+- **The stacked PC** ("unpredictable", UM 6.2.5). It is the queue's state at
+  the moment of the fault, fixed per instruction; the
+  m68000 corpus records it and the core reproduces it on every case (T3,
+  "Settled while building the core" below). Neither Motorola manual gives a
+  rule. **Run 2026-09-21** ([referees](referees.md)): WinUAE's tester core,
+  whose address-error frames cputest checks on real Amigas, agrees with the
+  gate's stacked PC everywhere except three families -- JSR through
+  (d16,An), (d8,An,Xn), (d16,PC), (d8,PC,Xn) (WinUAE: 2 less), MOVEM through
+  (d8,An,Xn), (d8,PC,Xn) (4 less) and DBcc (the target + 2) -- and it leaves
+  An unmoved when a word (An)+ operand faults, where the gate has moved it.
+  So the rule is T2 by running where they agree, and the core follows the
+  gate in the families where they do not: each is **contested** in
+  [claims](claims.md), to be settled by cputest on real hardware.
+- **Bits 15–5 of the access-information word** at `SSP+0` are undefined in
+  Figure 6-7. The core stacks what the m68000 corpus records there, the
+  decoder's opcode word (IRD; "Settled while building the core" below), and
+  WinUAE's tester core, which cputest compares field by field on hardware,
+  agrees on every address-error frame it judges ([referees](referees.md);
+  T2 by running). A cputest run on real hardware would make it T1.
+- **The aborted bus cycle is not asserted.** The m68000 corpus README: "On
+  real m68k, they still happen, AS just isn't asserted, so the results
+  aren't committed"; the corpus marks them `re`/`we` so a runner can tell a
+  faulted access from a completed one. A host never sees a memory read or
+  write for the faulting access.
+- **Which access faults first** in a multi-access instruction (`MOVE.L
+  (odd),(odd)`, `MOVEM`) determines the frame; the transaction order in the
+  corpus fixes it.
+- **Byte accesses never fault**, and `MOVEP` is byte-wise, so `MOVEP` at an
+  odd address is legal (PRM 4, MOVEP).
+- **`BSR`/`Bcc` with displacement −1** (`61FF`) is a legal byte displacement
+  on the 68000 (the 68020's long form does not exist), branches to an odd
+  address, and faults on the fetch; m68000 corpus issue #4 confirms the
+  corpus treats it that way.
+
+## Illegal instruction families
+
+`_dispatch.py` (which words are which), `_system.py` (`_op_illegal`,
+`_op_line_a`, `_op_line_f`, `_not_executed`).
+
+UM 6.3.6: any first word that matches no instruction takes vector 4;
+`$4AFA`, `$4AFB`, `$4AFC` always do; words with bits 15–12 = `1010` take
+vector 10 and `1111` take vector 11. Beyond that:
+
+- **Undefined EA encodings inside valid opcodes** (mode 7 with register
+  5–7; `An` as the destination of a data-only instruction; byte size on
+  `An`; `MOVE` to `#` or PC-relative) are illegal instructions on the 68000.
+  Musashi's decoder (MIT, run: `scripts/check_decoder_vs_musashi.py`)
+  rejects every one of them for the 68000; the 680x0 corpus's `map/68000.official.json`
+  enumerates 65,536 words of which 19,721 are `None` (undefined). T3;
+  `[unverified]` that *every* such word traps identically on silicon, though
+  no source claims otherwise.
+- **The stacked PC for illegal, A-line and F-line** is the address of the
+  offending word itself (so an emulator trap handler can decode it), the
+  same as privilege violation (UM 6.3.7) and unlike `TRAP`. UM 6.3.6 only
+  says "similar to that for traps". The corpus files `ILLEGAL_LINEA.json.bin`
+  and `ILLEGAL_LINEF.json.bin` record it (T3), and WinUAE's tester core,
+  run on `$4AFC`, `$4AFA`, `$4AFB`, `$4E7B` and line A/F words, stacks the
+  same address and takes the same 34 clocks (T2 by running,
+  [referees](referees.md); pinned by `tests/test_referee_evidence.py`).
+- **`MOVE from SR` is not privileged on the 68000** (UM 6.3.7 lists it
+  "68010 only"); a core that traps it in user mode breaks 68000 software.
+- **Bits 10–8 of the brief extension word** are ignored, not trapped (PRM
+  2.4).
+- **Shift counts** from a register are taken mod 64, and a count of 0 still
+  clears C and V and sets N/Z from the unchanged operand (PRM Table 3-18,
+  the `(r = 0)` rows); `ROXL`/`ROXR` by 0 copy X into C.
+
+## TAS
+
+`_alu.py`, `_op_tas`; the write half goes through the host's `tas_write`.
+
+`TAS` performs an indivisible read-modify-write bus cycle of 10 clocks (UM
+4.1.3, 5.1.3), the only 68000 instruction that does. Some boards do not
+complete the write (the Sega Genesis famously does not, because its bus
+arbiter does not decode the RMW cycle); that is a host matter, not the
+core's, which is why the write half is a separate callable. The m68000
+corpus README says its TAS timing "doesn't properly handle the special
+5-cycle TAS read-modify-write timing", but the totals it records are also
+what WinUAE's 68000 generator produces and what its tester core gives when
+run on all 2,498 cases it can judge (T2 by running, [validation](validation.md),
+"TAS"), so `TAS.json.bin` is gated on clocks like every other file. The
+per-cycle shape inside the read-modify-write is below this core's
+resolution ([claims](claims.md), "Outside the contract").
+
+## The T bit and STOP
+
+`cpu.py`, `step()` (the trace boundary); `_system.py`, `_op_stop` and
+`_not_executed`.
+
+Trace after `STOP`: PRM (STOP) says the T bit set by the immediate causes a
+trace exception before the processor stops. The m68000 corpus sets T in
+about half of its initial states but captures `final` before the trace
+exception is taken (its issue #2), so a runner must either strip T before
+comparing or model the exception as a separate boundary. This core does the
+second: the trace exception is its own `step()` ([validation](validation.md),
+"Trace"), so the corpus's `final` is exactly the first boundary.
+
+Which instructions are traced (2026-09-21): an instruction that is never
+executed -- an illegal word, a line 1010 or 1111 word, a privileged
+instruction in user mode -- is not followed by a trace exception, while an
+exception the instruction itself forces (TRAP, TRAPV, CHK, divide by zero)
+is, from the handler's first instruction. The manual states it (UM 6.3.8,
+DOC), and that is the evidence. (The 2026-09 record also cited MAME's
+microcode files and WinUAE's source, both read then; neither may be read,
+and neither is evidence now: docs/provenance.md.) Neither corpus can show it; the core had it wrong
+until 8760315 ([coverage](coverage.md), "What the coverage work found").
+
+## The order of authority
+
+1. flamewing's BCD tables (T1) for `ABCD`/`SBCD`/`NBCD`.
+2. WinUAE's 68000 tester core (T2 inside the scope cputest checks on real
+   Amigas), built and run here ([referees](referees.md)), for results,
+   defined and undefined flags, address-error frames and register side
+   effects, and clock totals beyond ±2; a cputest run on real hardware, when
+   one becomes available, over that.
+3. The pinned SingleStepTests/m68000 corpus (T3, microcode-derived) for
+   everything, including cycle counts and transaction order. Where it and
+   WinUAE's run disagree the core stays on the corpus and
+   [claims](claims.md) lists the behaviour as contested.
+4. Musashi and the 680x0 corpus (T3) as detectors: a disagreement is a
+   question to answer with a higher tier, never a verdict.
+5. The manuals for documented behavior and as the tie-breaker of last
+   resort when two T3 sources disagree and no higher tier speaks.
+
+Every rule adopted from this page has a comment on the line that implements
+it, naming the tier, and the handler's docstring names the manual page or
+corpus file the rule comes from (`tests/test_readability.py` enforces the
+citation).
+
+## Settled while building the core (2026-09-19)
+
+Each rule below is what the pinned SingleStepTests/m68000 corpus records on
+every one of its cases (T3; the corpus is MIT, generated by running MAME
+0.285's microcode transcription), found
+while bringing the core to 317,500 / 317,500; the code line that encodes it
+carries a comment naming it. Where a higher tier speaks, it is named.
+
+**Flags after DIVU and DIVS overflow.** `V=1, N=1, Z=0, C=0`, destination
+unchanged: the corpus agrees with WinUAE's tester core (run, OBSERVED),
+not with Musashi. The clock counts are a shift-and-subtract loop FITTED to
+the corpus (rewritten 2026-11-19 without reference to Jorge Cwik's code or
+WinUAE's; [timing](timing.md)) and match every DIVU and DIVS case. Divide
+by zero is still absent from the corpus (its issue #3).
+
+**Flags after CHK.** Z from Dn = 0, N from Dn < 0, V and C clear, on every
+path: agrees with WinUAE (T2), not with Musashi's non-trapping path. Clocks:
+the upper bound is tested first (trap after 8 internal clocks); a negative
+Dn within the bound traps after 10, or after 8 when `bound - Dn` taken as a
+16-bit difference is negative (all 2,500 cases).
+
+**The stacked PC of an address error** is a PC register that trails the
+fetch address, not the address of the instruction. At the start of an
+instruction it holds the instruction's address + 2; it is brought up to the
+fetch address at mode-specific steps: before a `-(An)` word operand, before an absolute
+address's last extension word, before a MOVE destination's extension word,
+before a MOVE destination write to `(An)`/`(An)+`, before the target read of
+a taken `DBcc`, `JSR` (except `(An)`) and after `BSR` (which stacks the
+target itself), at each closing prefetch, and at a few others the handlers
+name (`_commit_pc` in the code). A long `-(An)` source does not copy it.
+Every one of these steps is forced by the corpus: removing any one of them
+makes some case fail (`scripts/ablate_hidden_state.py`, 2026-11-19), except
+the ABCD/SBCD `-(An)` form and the immediate bit operations, whose operands
+are bytes and so can see the step only through a bus error; there WinUAE's
+tester core, run as a closed box, agrees with the step (OBSERVED: ABCD and
+SBCD 2,514 of 2,514 read faults with it, 0 without).
+
+**The IR word and bits 15-5 of the access-information word** carry the
+opcode the decoder holds. The closing prefetch hands it the next opcode
+before its read; so a MOVE to `-(An)`, which prefetches before it writes,
+stacks the *next* instruction's opcode when its write faults. A long MOVE to
+`-(An)` and PEA prefetch without handing it over, so a fault on the (first)
+write stacks their own opcode; the decoder takes the next opcode at the
+boundary. (Until 2026-11-19 both handed it over after the write; that step
+is pinned by no evidence, since only a bus error on MOVE.L's second write
+could see it, and was removed.) I/N (bit 3) is 0 for an
+instruction's own accesses and 1 for exception processing's; the function
+code is the one the aborted access used.
+
+**The access address** stacked is the whole 32-bit address computed, upper byte included (the bus sees only A23-A1).
+
+**Clocks of an address error:** the aborted access costs its 4 clocks and 4
+more, then two internal steps of 2; then 7 writes, 2 vector reads, and the
+refill with 2 internal clocks between its reads: 58 clocks from the aborted
+access to the handler's first instruction. UM Table 8-14 prints 50(4/7); the
+corpus's 8 more are the aborted cycle and the extra 4 after it.
+
+**Stacking order.** Group 1/2 frames: PC low, SR, PC high. Group 0 frames:
+PC low, SR, PC high, IR, address low, information word, address high.
+BSR, JSR and PEA push a long high word first; MOVE.L to `-(An)`, ADDX/SUBX
+`-(An)`, MOVEM to `-(An)` and read-modify-write results write the low word
+first.
+
+**Long results set their flags in two halves.** The ALU is 16 bits wide:
+N Z V C come first from the low word, then N from the high word with Z kept
+only if the high word is zero too. A MOVE.L that faults on its first write
+stacks whichever half-state had been reached (SST MOVE.l): for a register or
+immediate source to `(An)`/`(An)+` the flags are untouched, to `(d16,An)`/
+`(d8,An,Xn)` only the high-word half is applied; from memory to `(An)`,
+`(An)+` or `(xxx).L` only the low-word half; every other destination has
+complete flags before its first write.
+
+**When address registers move**, which the final registers of a faulting
+case show: a word or byte `(An)+`/`-(An)` operand moves An before the
+access; a long `(An)+` source moves it between its two words (so a fault
+leaves it), a long `-(An)` source before; a MOVE destination `(An)+` moves
+after the write, and a MOVE.L destination `-(An)` between its two writes;
+CMPM steps Ay one word at a time and Ax only after its operand is read; UNLK
+moves SP only after both words are read; DBcc writes Dn only after it has
+read the branch target, and JSR reads the target's first word before it
+pushes anything, so an odd target faults with Dn and the stack untouched.
+
+**LINK A7** pushes A7's value from before the push.
+
+**MOVE to SR/CCR and the SR/CCR immediates** re-read the next instruction
+after writing SR (the refill is two reads), 4 internal clocks for MOVE and
+8 for ANDI/ORI/EORI.
+
+**TAS** takes 14 clocks for `(An)`: operand read, 2 internal clocks, the
+write, the prefetch. The corpus README doubts its TAS timing, but WinUAE's
+68000 generator (T2) gives the same totals; see [validation](validation.md).
+
+**A group 0 fault during group 0 processing** (an odd SSP or an odd handler
+address after an address error) halts the processor, as UM 5.4.4 says
+(`_core.py`, `_group_zero`;
+`tests/test_coverage_gaps.py::test_a_fault_while_taking_an_address_error_halts_the_processor`
+asserts it). MAME 0.285 takes another address error instead; the corpus has
+no such case, Musashi (run, odd SSP) halts, as WinUAE's emulator did when its
+source was read before 2026-09-21 (history, not evidence), and
+cputest skips every test that would halt, so this is undecidable without
+hardware ([claims](claims.md), "Undecidable here").

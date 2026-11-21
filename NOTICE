@@ -1,0 +1,34 @@
+m68000-python
+Copyright (c) 2026 alewman. Licensed under the MIT License (LICENSE).
+
+No third-party code is included in this repository or its packages. The
+sources it credits, and how each is used:
+
+- SingleStepTests/m68000 (Copyright (c) 2024 SingleStepTests, MIT License):
+  the gate corpus, fetched at a pinned commit by scripts/fetch_test_vectors.py
+  and never committed. The DIVU/DIVS clock rule in src/m68000_python/_alu.py
+  is fitted to its recorded cycle counts (scripts/fit_divide_clocks.py).
+
+- Musashi (Copyright Karl Stenerud, MIT License): run as a referee
+  (validation/referees/musashi_referee.c, our own driver, links the fetched
+  source at build time; never committed), and its decoder checks the opcode
+  map word for word (validation/referees/musashi_decoder.c,
+  scripts/check_decoder_vs_musashi.py). docs/undocumented-behavior.md
+  describes Musashi's BCD mechanism, which src/m68000_python/_bcd.py follows.
+
+- MAME 0.285 (MAMEdev and contributors; GPL-2.0-or-later as a whole): run
+  as a closed box for the lockstep. Two of its files carry BSD-3-Clause
+  headers and are cited: m68000.cpp (Olivier Galibert), whose E-clock
+  synchronisation of an autovectored acknowledge cpu.py's _e_clock_wait
+  states in its own words, and m68kdasm.cpp (Karl Stenerud), whose text
+  format disasm.py follows so traces diff line for line. MAME's other
+  m68000 files (m68000gen.py, m68000.lst, the generated m68000-*.cpp
+  handlers) carry no licence header, are GPL, and are not used
+  (docs/provenance.md). No MAME code or table is reproduced.
+
+- WinUAE (Toni Wilen and the UAE authors, GPL-2.0-or-later): run only, as a
+  closed box, through the separate GPL tool m68000-winuae-referee, which is
+  not part of this repository (docs/referees.md, docs/provenance.md).
+
+- Motorola M68000 Family Programmer's Reference Manual and M68000 User's
+  Manual: the documents the core is written from.
