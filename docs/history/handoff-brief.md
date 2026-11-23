@@ -89,7 +89,7 @@ the corpus transactions show.
    issue" shows (diagnose before excluding). Every excluded case gets a
    line in `docs/validation.md` with the reason.
 4. **MAME lockstep (T3).** A System 16B host (`altbeast`, or `goldnaxe`;
-   ROMs in place from the myrient path, decrypt through MAME's tables or
+   ROMs in place from the local MAME romset, decrypt through MAME's tables or
    pick an unencrypted set) running against the `error.log` stream from
    `docs/mame-oracle.md` with `curpc`, `sr`, `d0`–`d7`, `a0`–`a6`, `usp`,
    `sp` per line. Acceptance: N million instructions identical, N stated;

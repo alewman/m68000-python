@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import collections
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -184,7 +185,9 @@ class System16B(Board):
     extra_watch = (
         "dbg:command('wpset 0:mcu:data,10,w,1,{logerror \"M %X %X\\n\",wpaddr,wpdata; g}')"
     )
-    romset = Path("/data/emu/source/myrient.erista.me/files/MAME/ROMs (non-merged)/altbeast.zip")
+    # In the local MAME romset folder, MAME_ROMPATH (unset: pass the zip as ROM).
+    _rompath = os.environ.get("MAME_ROMPATH")
+    romset = Path(_rompath, "altbeast.zip") if _rompath else None
     program = ("epr-11907.a7", "epr-11906.a5")  # even bytes, odd bytes
 
     def __init__(self, rom: bytes) -> None:
@@ -563,6 +566,8 @@ def main() -> int:
     args = parser.parse_args()
     if args.rom is None:
         args.rom = getattr(BOARDS[args.board], "romset", None)
+    if args.rom is None:
+        parser.error("name the ROM (or set MAME_ROMPATH for a board that uses its MAME romset)")
     if args.action == "record":
         record(args.board, args.rom, args.seconds, args.tag)
         return 0

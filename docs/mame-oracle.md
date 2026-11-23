@@ -8,8 +8,7 @@ instruction. This page records the exact command line, the Lua script, the
 register names, what came out, and the traps. Everything here was run on
 2026-09-11/12 on this machine with `/usr/games/mame` = `0.285 (unknown)`.
 
-ROMs are used in place from
-`/data/emu/source/myrient.erista.me/files/MAME/ROMs (non-merged)/` through
+ROMs are used in place from the local MAME romset folder (`$MAME_ROMPATH`) through
 `-rompath`; they are never copied, and neither ROMs nor traces are committed
 (`.gitignore` covers `error.log`, `*.trace`, `validation/mame_runs/`).
 
@@ -28,7 +27,7 @@ Command line (one line; `$RUNDIR` is a fresh, empty directory):
 
 ```text
 /usr/games/mame altbeast \
-  -rompath "/data/emu/source/myrient.erista.me/files/MAME/ROMs (non-merged)" \
+  -rompath "$MAME_ROMPATH" \
   -homepath "$RUNDIR" -video none -sound none -nothrottle -noreadconfig \
   -skip_gameinfo -debug -debugger none -log -autoboot_script "$RUNDIR/trace.lua" \
   -str 3

@@ -42,6 +42,8 @@ def main() -> int:
     args = parser.parse_args()
     board = BOARDS[args.board]
     rom_path = args.rom or getattr(board, "romset", None)
+    if rom_path is None:
+        parser.error("name the ROM (or set MAME_ROMPATH for a board that uses its MAME romset)")
     rom = load_rom(board, rom_path)
     trace = run_directory(args.board, rom_path, args.tag) / "disassembly.trace"
 
