@@ -140,11 +140,13 @@ class Genesis(Board):
     """MAME's ``genesis`` driver (sega/megadriv.cpp at mame0285).
 
     Cartridge ROM from $000000; work RAM $E00000-$FFFFFF, 64 KB mirrored,
-    zeroed at reset (``memset`` in ``machine_reset``), modelled here;
-    everything between the end of the ROM and $DFFFFF -- Z80 window, I/O,
-    VDP -- has its reads replayed and its writes checked.  The bus drops
-    TAS's write-back (``megadriv_tas_callback``: "writeback not allowed"),
-    so the host does too.  Interrupts are autovectored.
+    zeroed at reset (OBSERVED: the lockstep agrees with RAM that starts at
+    zero), modelled here; everything between the end of the ROM and $DFFFFF
+    -- Z80 window, I/O, VDP -- has its reads replayed and its writes checked.
+    MAME's Genesis bus is taken to complete no TAS write-back, so the host
+    drops it too (OBSERVED: the 40 s lockstep agrees with the host dropping
+    it; that MAME drops it for the reason a real Genesis does is HYPOTHESIS).
+    Interrupts are autovectored.
     """
 
     name = "genesis"
@@ -180,7 +182,7 @@ class System16B(Board):
     name = "altbeast"
     driver = "altbeast"
     # The i8751 reaches the 68000's bus through the mapper: writing 1 or 2
-    # to register 5 makes it write or read one word (sega/315_5195.cpp).
+    # to register 5 makes it write or read one word (OBSERVED in the traces).
     # Log its mapper writes so the trace reader can drop those accesses.
     extra_watch = (
         "dbg:command('wpset 0:mcu:data,10,w,1,{logerror \"M %X %X\\n\",wpaddr,wpdata; g}')"

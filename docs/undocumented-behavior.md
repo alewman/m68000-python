@@ -16,12 +16,15 @@ a question; it cannot settle one.
 
 Sources named on this page, with licenses:
 
-- **WinUAE** (Toni Wilen and the UAE authors; GPL-2.0+),
+- **WinUAE** (Toni Wilen and the UAE authors; GPL-2.0-only at the pin),
   <https://github.com/tonioni/WinUAE>: **closed box only** (the family's
-  sources register). Its CPU tester's 68000 core is built and run here as a
-  referee, through a separate GPL tool ([referees](referees.md)); what the
-  run gives is tagged **OBSERVED** (closed box, WinUAE `1977af50`). Its
-  readme and changelog are its author's prose about the tester's runs on
+  sources register). Its CPU tester's 68000 core is run here as a referee,
+  built by the GPL-2.0-only tool `tools/winuae` in `emu-tools-gpl2`
+  ([referees](referees.md)); this repository fetches none of its source.
+  What the run gives is tagged **OBSERVED** (closed box, WinUAE `6e0d5ae`
+  via winuae-referee 0.2.0 since 2026-11-24; `1977af50` before, with
+  identical results). Its readme and changelog (read from the fetched tree
+  before 2026-11-24, not re-read since) are its author's prose about the tester's runs on
   real Amigas (readme: "68000: Complete. Including bus and address error
   stack frame/register/CCR modification undocumented behavior. Full cycle
   count support."), which is why this page ranks its 68000 branch **T2**;
@@ -90,10 +93,11 @@ owner's ruling on resting this case on a closed-box run is pending
 | Musashi `divs` | T3 | `V=1`, others unchanged; special-cases `$80000000 / -1` as quotient 0 with **Z=1, N=V=C=0** and writes 0 to the register, which no other source does |
 | m68000 corpus, clocks | T3 | an overflow of the magnitudes (\|dividend\| >> 16 ≥ \|divisor\|) ends early at 16 or 18 clocks; a quotient that only proves out of range at the end takes the full 120–156 (the FITTED rule in `_alu.py`, [timing](timing.md)) |
 
-Divide by zero: "DIVS always sets Z-flag" per WinUAE's changelog (4.3.0 in
-the pinned `od-win32/winuaechangelog.txt`). **Run 2026-09-21:** WinUAE's
-CPU-tester core, built from `1977af5` and run on DIVU and DIVS by zero
-([referees](referees.md)), gives DIVS: Z set, N V C clear; DIVU: N from bit
+Divide by zero: "DIVS always sets Z-flag" per WinUAE's changelog for 4.3.0
+(the author's prose, read before 2026-11-24 from the tree then fetched).
+**Run 2026-09-21:** WinUAE's CPU-tester core, built from `1977af5` and run
+on DIVU and DIVS by zero ([referees](referees.md); re-run 2026-11-24 at
+`6e0d5ae` via winuae-referee 0.2.0, identical), gives DIVS: Z set, N V C clear; DIVU: N from bit
 31 of the dividend, Z if its upper word is zero, V C clear; X kept.
 **OBSERVED** (closed box, inside cputest's checked scope); pinned by
 `tests/test_referee_evidence.py`, which is what kills mutant D10

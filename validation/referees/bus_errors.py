@@ -55,7 +55,7 @@ REGION = 0x80000
 #: Instructions whose first program read is a jump target computed from a
 #: register or the stack, which may carry an upper address byte.  The
 #: tester's program fetches check the bus-error region against the full 32
-#: bits (winuae_referee.cpp can only re-check data accesses), so a target
+#: bits (the GPL driver can only re-check data accesses, docs/referees.md), so a target
 #: whose upper byte is set would not fault there; these are left out of the
 #: program-read sweep.
 JUMPS = {"JMP", "JSR", "RTS", "RTE", "RTR"}

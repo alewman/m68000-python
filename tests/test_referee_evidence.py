@@ -1,9 +1,11 @@
 """Behaviour pinned by running WinUAE's CPU-tester core, inside its hardware-checked scope.
 
-WinUAE's CPU tester (tonioni/WinUAE at 1977af501f6c, the 68000 core its
-generator emits for the tester) is built by a separate GPL-2.0-or-later
-tool, m68000-winuae-referee, and run here as a closed box, one instruction
-at a time (docs/referees.md).  What it gives is OBSERVED.  That tester is
+WinUAE's CPU tester (tonioni/WinUAE, the 68000 core its generator emits for
+the tester) is built by the GPL-2.0-only tool tools/winuae of emu-tools-gpl2
+and run as a closed box, one instruction at a time (docs/referees.md).  What
+it gives is OBSERVED (WinUAE 6e0d5ae via winuae-referee 0.2.0 since
+2026-11-24; the values below were recorded at 1977af501f6c and are identical
+at the new pin).  These tests run the core only, not the referee.  That tester is
 the program Toni Wilen runs on real Amigas and corrects until the hardware
 agrees, by his account, so the project ranks it **T2** for what the tester
 checks and a detector (T3) elsewhere; under the owner's ruling of
@@ -11,8 +13,9 @@ checks and a detector (T3) elsewhere; under the owner's ruling of
 results stay OBSERVED.  Each test below names why its case lies inside the
 tester's scope: a cputest preset that generates the case with the
 undefined flags checked (every 68000 preset turns that check on), or a
-line of the tester's readme or WinUAE's changelog
-(od-win32/winuaechangelog.txt) reporting the behaviour verified.
+line of the tester's readme or WinUAE's changelog reporting the behaviour
+verified (the author's prose, read before 2026-11-24 from the tree then
+fetched; this repository no longer fetches it).
 
 The expected values are the referee's, written out here as rules; none is
 taken from this core.  Where the referee and the gate corpus disagree, or

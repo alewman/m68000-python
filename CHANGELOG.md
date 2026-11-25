@@ -12,6 +12,14 @@ frame, outside the contract (below).
 
 ### Changed
 
+- **The WinUAE referee is found as
+  `$EMU_TOOLS_GPL2/tools/winuae/build/winuae_referee`** (2026-11-24): the tool
+  is now `tools/winuae` in `emu-tools-gpl2` (winuae-referee 0.2.0, WinUAE
+  repinned from `1977af5` to `6e0d5ae`, GPL-2.0-only as built). The
+  `WINUAE_REFEREE` variable is retired (the tool offers no override); a run
+  without the tool stops with exit status 3, naming `EMU_TOOLS_GPL2`.
+  Calibration, the bus-error sweep and the referee-evidence tests give the
+  same results as before.
 - **The DIVU/DIVS clocks are rewritten from permitted sources only.**
   `divide_unsigned_clocks` and `divide_signed_clocks` had followed Jorge
   Cwik's algorithm as carried in WinUAE (GPL-2.0+); they are now a
@@ -58,8 +66,8 @@ frame, outside the contract (below).
   `m68000.lst`.
 - **The WinUAE referee driver** (`validation/referees/winuae_referee.cpp`,
   `winuae_shim.*`, and the WinUAE half of `build_referees.py`): it is
-  WinUAE-derived, so it moved to a separate local GPL-2.0-or-later tool.
-  `referee.py` finds its binary through `WINUAE_REFEREE`; the Oracles
+  WinUAE-derived, so it moved to a separate local GPL tool (since 2026-11-24
+  `emu-tools-gpl2`'s `tools/winuae`, above); the Oracles
   workflow no longer builds or calibrates it. It was in the 0.1.0 sdist.
 
 ### Fixed

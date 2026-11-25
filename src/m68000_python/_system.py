@@ -95,7 +95,8 @@ class SystemMixin:
         8 internal clocks after the operand read, as CHK's trap).  PRM Table
         3-18 leaves N, Z and V undefined and clears C.  The values below are
         OBSERVED, WinUAE run: its cputest 68000 core run as a closed box
-        (WinUAE 1977af50, docs/referees.md; tests/test_referee_evidence.py),
+        (WinUAE 1977af50, and 6e0d5ae via winuae-referee 0.2.0 with the same
+        results; docs/referees.md; tests/test_referee_evidence.py),
         and rewritten 2026-11-19 from those recorded results alone.  DIVS sets
         Z and clears N, V and C; DIVU clears V and C, sets N from bit 31 of
         the dividend and Z when its upper word is zero; X is kept.  Neither

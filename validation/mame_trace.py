@@ -9,13 +9,15 @@ Two kinds of line come out of the Lua script in ``lockstep.lua``:
 * ``M register value``, written when System 16B's i8751 writes one of the
   315-5195 mapper's first sixteen registers.  The reader keeps a copy of
   them, because writing 1 or 2 to register 5 makes the mapper write or read
-  one word of the 68000's bus on the i8751's behalf (sega/315_5195.cpp):
-  that access, if it falls in a watched window, is logged next, and is
-  dropped here because the CPU did not make it;
+  one word of the 68000's bus on the i8751's behalf (OBSERVED in the
+  traces: such an access follows the write): that access, if it falls in a
+  watched window, is logged next, and is dropped here because the CPU did
+  not make it;
 * ``B value`` and ``Z address``, written when the Genesis's Z80 writes its
   68000-bank register ($6000) or touches its bank window ($8000-$FFFF),
   which MAME turns into an access on the 68000's bus at the banked address
-  (sega/megadriv.cpp, ``z80_read_68k_banked_data``); likewise dropped;
+  (OBSERVED in the traces: the watchpoints fire on those accesses);
+  likewise dropped;
 * a read line, ``R address bits value``, written by a watchpoint when the
   instruction running reads a watched (device) address; a write line,
   ``W address bits value``, likewise for a watched write.

@@ -47,7 +47,7 @@ has the load-independent comparison). CPython 3.14.4; PyPy 7.3.20 / Python
 | SingleStepTests/m68000, 127 files, 317,500 cases (`tests/test_corpus.py`), and `step_clocks` at every access end of the 261,894 cases without an address error (`tests/test_step_clocks.py`) | T3 (microcode) | `64b253116a3de04aaac4346c43680960dc9b67e5` | 317,500 / 317,500; all agree | 14.8 s | 12.9 s |
 | Decoder: 65,536 first words vs MAME 0.285 `m68000.lst` (**retired 2026-11-19**: the listing has no licence header, so it is GPL; replaced by the Musashi check below) | T3 | `mame0285` | 45,815 defined + ILLEGAL + 8,192 line A/F, every word's family agrees, 0 of 65,536 differ | 1.9 s | -- |
 | Decoder: 65,536 first words vs Musashi's 68000 decoder (`scripts/check_decoder_vs_musashi.py`, from 2026-11-19) | T3 | Musashi `313ebf1bd9f4` | 45,799 defined words agree in family, 19,721 trap words agree, 16 known differences (Bcc/BRA/BSR $FF: the 68020's 32-bit marker in Musashi, a displacement of -1 on the 68000, PRM), 0 unexpected | 1 s | -- |
-| WinUAE's CPU-tester core vs the gate, run (`validation/referees/calibrate.py winuae`) | T2 in scope | WinUAE `1977af501f6c3389c2eefe119ecb10c82d6582f3` | 308,416 / 314,988 judged (2,512 not judged); every residual an address-error or 2-clock class named in [referees](referees.md) | -- | 12 s |
+| WinUAE's CPU-tester core vs the gate, run (`validation/referees/calibrate.py winuae`) | T2 in scope (OBSERVED) | WinUAE `6e0d5ae15a9e7ae071d64fa052a34429ed787476` via winuae-referee 0.2.0 (`emu-tools-gpl2` `tools/winuae`; 2026-11-24, identical to the old pin `1977af5`) | 308,416 / 314,988 judged (2,512 not judged); every residual an address-error or 2-clock class named in [referees](referees.md) | -- | 12 s |
 | Musashi vs the gate, run (`calibrate.py musashi`) | T3 | Musashi `313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd` | 257,300 / 261,894 judged; every difference an undefined or disputed rule a higher tier decides | -- | 13 s |
 | The open questions put to both referees (`validation/referees/questions.py`) | T2/T3 | the same | the tables of [referees](referees.md), unchanged | -- | 5 s |
 | SingleStepTests/680x0 as a detector (`scripts/classify_680x0.py`) | T3 | `e0d5ece9670205cc84a0101081837deb446f86a3` | 787,660 / 1,000,060 agree; every disagreement classified, none `UNCLASSIFIED` | -- | 30 s |
@@ -60,7 +60,8 @@ has the load-independent comparison). CPython 3.14.4; PyPy 7.3.20 / Python
 Commands, from the repository root with the corpus fetched
 (`python scripts/fetch_test_vectors.py`, and `--with-680x0` for the
 detector) and the referees built (`python validation/referees/build_referees.py` for
-Musashi; the WinUAE referee from the separate GPL tool, with `WINUAE_REFEREE` set,
+Musashi; the WinUAE referee from the GPL-2.0-only tool `tools/winuae` in
+`emu-tools-gpl2`, found as `$EMU_TOOLS_GPL2/tools/winuae/build/winuae_referee`,
 [referees](referees.md)):
 
 ```text
@@ -118,8 +119,9 @@ order of every bus access is compared).
   special 5-cycle TAS read-modify-write timing". The totals the corpus
   records (memory forms: operand read, 2 internal clocks, write, then the
   prefetch; 14 clocks for `(An)`) are also what WinUAE's 68000 core
-  gives when run (WinUAE `1977af501f6c3389c2eefe119ecb10c82d6582f3`,
-  OBSERVED, closed box since 2026-09-21: its tester core agrees with all
+  gives when run (WinUAE `1977af501f6c3389c2eefe119ecb10c82d6582f3`, and
+  `6e0d5ae` via winuae-referee 0.2.0 since 2026-11-24 with the same
+  results; OBSERVED, closed box since 2026-09-21: its tester core agrees with all
   2,498 TAS cases it can judge, clocks included, [referees](referees.md);
   its generator's source was read for this before then), so all 2,500 TAS cases are
   compared on clocks too and pass. The per-cycle shape inside the
@@ -349,7 +351,7 @@ until someone runs the same case on silicon.
 | MAME 0.285 `m68000.lst`, the microcoded core's decode table | T3 | **no licence header: GPL-2.0+** under MAME's COPYING (found 2026-11-19) | `mame0285` | which of the 65,536 first words are which instruction | **Retired 2026-11-19, not to be read** ([provenance](provenance.md)); Musashi's decoder replaces it |
 | flamewing/68k-bcd-verifier | T1 | GPL-3.0 | `39a01be528b0744302bf1dc9b3463fc22a3fc45f` (2018-08-31) | ABCD, SBCD, NBCD: all inputs, all flags | **Gate: all 525,312 inputs agree** (generator run locally, table hashed) |
 | transistorfet/68k-test-runner | T1 (tiny) | GPL-3.0 | `5b10d9f68a3f4370e02f5bda8afd28d2a86e69e7` (2023-06-12) | ASL.b, ASR.b of the 2023 Harte corpus on a real 68000 board | Not fetched; evidence only |
-| WinUAE `cputest` and its 68000 core | T2 (inside cputest's checked scope) | GPL-2.0+ | `1977af501f6c3389c2eefe119ecb10c82d6582f3` (2026-09-17) | Integer instructions, undefined flags, address/bus error frames, cycle counts to ±2 (7 MHz Amiga) | **Built and run** (validation/referees, not committed): vs the gate 308,416 / 314,988 judged cases agree; the 680x0 table re-derived; [referees](referees.md) |
+| WinUAE `cputest` and its 68000 core | T2 (inside cputest's checked scope); results OBSERVED | GPL-2.0-only (the pin's `COPYING`; the tool as built is GPL-2.0-only) | `6e0d5ae15a9e7ae071d64fa052a34429ed787476` (2026-10-27) via winuae-referee 0.2.0, since 2026-11-24; `1977af501f6c3389c2eefe119ecb10c82d6582f3` (2026-09-17) before | Integer instructions, undefined flags, address/bus error frames, cycle counts to ±2 (7 MHz Amiga) | **Run as a closed box** (built by `emu-tools-gpl2` `tools/winuae`, outside this repository): vs the gate 308,416 / 314,988 judged cases agree; the 680x0 table re-derived; [referees](referees.md) |
 | SingleStepTests/m68000 | T3 (microcode-derived) | MIT | `64b253116a3de04aaac4346c43680960dc9b67e5` (2024-08-01) | 127 files, 317,500 cases, registers + RAM + prefetch + bus transactions + cycles | **Gate: 317,500 / 317,500** |
 | MAME 0.285 microcoded 68000 | T3 (microcode-derived) | `m68000.cpp`/`.h` BSD-3-Clause; the generated handlers, `m68000gen.py` and `m68000.lst` have no header (GPL-2.0+); MAME as a whole GPL-2.0+: **run as a closed box only** | `mame0285` = `3bd358f74ce504be519247ac9eddff4d6b46cb70`; `/usr/games/mame` 0.285 | Whole-game traces, see [mame-oracle](mame-oracle.md) | **Trace run verified** |
 | SingleStepTests/680x0 (Harte) | T3 | **none** (issue #1 open) | `e0d5ece9670205cc84a0101081837deb446f86a3` (2024-05-14) | 124 files, 1,000,060 cases, registers + RAM + prefetch + transactions + cycles | **Fetched and counted**, detector only |
@@ -397,7 +399,10 @@ would be the cheapest route to a T1 statement about it.
 
 ## T2: WinUAE's 68000 and `cputest`
 
-<https://github.com/tonioni/WinUAE>, GPL-2.0+, `cputest/readme.txt`. Toni
+<https://github.com/tonioni/WinUAE>, GPL-2.0-only at the pin (`6e0d5ae`, whose
+`COPYING` is the GPL-2.0 text), `cputest/readme.txt` (the author's prose,
+read from the fetched tree before 2026-11-24 and not re-read since; this
+repository no longer fetches WinUAE). Toni
 Wilen's tester generates test sets from the UAE core ("All the CPU logic
 comes from UAE CPU core"), then runs them *on real Amigas*, stopping at the
 first mismatch; the emulator is corrected until hardware agrees. It checks
@@ -411,9 +416,10 @@ the same file: TAS results depend on RMW-compatible RAM; STOP and RESET
 variants that would halt are skipped; the generator is "very brute force".
 
 What this repository can use without an Amiga: the tester's own 68000
-core, which the separate GPL-2.0-or-later tool m68000-winuae-referee
-(local only since 2026-11-19, outside this MIT repository) generates from
-the pinned source and runs one instruction at a time, as a closed box
+core, which the GPL-2.0-only tool `tools/winuae` in `emu-tools-gpl2`
+(outside this MIT repository; until 2026-11-24 the stand-alone
+m68000-winuae-referee, now archived) generates from the pinned source and
+runs one instruction at a time, as a closed box
 ([referees](referees.md): what it models, its calibration against the gate,
 its checked scope and every answer it gave).  What it cannot claim: a
 hardware run of its own; WinUAE's answer is T2 only where cputest checks

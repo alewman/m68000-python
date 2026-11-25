@@ -13,11 +13,13 @@ docs/referees.md.
 Musashi: m68kmake generates m68kops.c from m68k_in.c; m68kconf.h is copied
 with the 68010-68040 cores off and address errors on.
 
-WinUAE's CPU-tester referee is not built here.  Its driver is WinUAE-derived
-(GPL-2.0-or-later), so since 2026-11-19 it lives in a separate local tool,
-m68000-winuae-referee, with its own LICENSE and build script, never in this
-MIT repository or its packages.  referee.py finds the built binary through
-the ``WINUAE_REFEREE`` environment variable (docs/referees.md).
+WinUAE's CPU-tester referee is not built here, and no WinUAE source is
+fetched here.  Its driver is WinUAE-derived and GPL-2.0-only as built, so it
+lives outside this MIT repository and its packages: since 2026-11-24 it is the
+tool ``tools/winuae`` of emu-tools-gpl2 (winuae-referee 0.2.0, WinUAE 6e0d5ae;
+from 2026-11-19 it was the stand-alone m68000-winuae-referee, now archived).
+referee.py runs the built binary at
+``$EMU_TOOLS_GPL2/tools/winuae/build/winuae_referee`` (docs/referees.md).
 """
 
 from __future__ import annotations
@@ -129,8 +131,9 @@ def main() -> int:
     for name in args.referees:
         if name == "winuae":
             parser.error(
-                "the WinUAE referee is a separate GPL tool (m68000-winuae-referee): build it"
-                " there and set WINUAE_REFEREE to its binary (docs/referees.md)"
+                "the WinUAE referee is the GPL-2.0-only tool tools/winuae of emu-tools-gpl2:"
+                ' build it there (python3 -I "$EMU_TOOLS_GPL2/tools/winuae/build_winuae.py";'
+                " docs/referees.md)"
             )
         if name != "musashi":
             parser.error(f"argument referees: invalid choice: {name!r} (choose from 'musashi')")

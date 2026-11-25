@@ -26,9 +26,10 @@ sources it credits, and how each is used:
   handlers) carry no licence header, are GPL, and are not used
   (docs/provenance.md). No MAME code or table is reproduced.
 
-- WinUAE (Toni Wilen and the UAE authors, GPL-2.0-or-later): run only, as a
-  closed box, through the separate GPL tool m68000-winuae-referee, which is
-  not part of this repository (docs/referees.md, docs/provenance.md).
+- WinUAE (Toni Wilen and the UAE authors, GPL-2.0-only at the pinned
+  commit): run only, as a closed box, through the GPL-2.0-only tool
+  tools/winuae of emu-tools-gpl2, which is not part of this repository; no
+  WinUAE source is fetched here (docs/referees.md, docs/provenance.md).
 
 - Motorola M68000 Family Programmer's Reference Manual and M68000 User's
   Manual: the documents the core is written from.

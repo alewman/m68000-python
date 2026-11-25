@@ -10,14 +10,16 @@ answered.  Referees are evidence with a lineage and a tier
 one lineage are one confirmation, and a referee's word counts as a judgement
 only inside the scope its author corrected it on.
 
-Everything is reproducible (third-party sources are fetched at pinned
-commits into an ignored directory and never committed).  Musashi is built
-here; the WinUAE referee is built by the separate GPL tool
-`m68000-winuae-referee` (below) and found through `WINUAE_REFEREE`:
+Everything is reproducible.  Musashi (MIT) is fetched at its pinned commit
+into an ignored directory, never committed, and built here.  WinUAE's source
+is never fetched or opened by this repository: the WinUAE referee is the
+GPL-2.0-only tool `winuae` in `emu-tools-gpl2` (below), found at its fixed
+path under `EMU_TOOLS_GPL2` (the family tool contract, "Finding a tool"):
 
 ```text
 python validation/referees/build_referees.py                 # fetch and build Musashi
-export WINUAE_REFEREE=/path/to/m68000-winuae-referee/build/winuae/winuae_referee
+export EMU_TOOLS_GPL2=/path/to/emu-tools-gpl2                # a checkout; the referee is
+                                                             # $EMU_TOOLS_GPL2/tools/winuae/build/winuae_referee
 python validation/referees/calibrate.py winuae               # vs the gate, per file (~1 min, PyPy)
 python validation/referees/calibrate.py musashi              # likewise
 python validation/referees/calibrate.py musashi --corpus 680x0
@@ -32,7 +34,7 @@ Timings are PyPy 7.3.23 on the shared 32-core machine at a load of about 8.
 
 | Referee | Pin | Lineage | Models | Tier |
 | --- | --- | --- | --- | --- |
-| WinUAE's CPU tester core | `tonioni/WinUAE` `1977af501f6c3389c2eefe119ecb10c82d6582f3` (2026-09-17) | UAE (Bernd Schmidt, 1995) as developed by Toni Wilen; corrected against real Amigas with `cputest`.  **Hatari's `src/cpu/` is the same code**: not built here, and it would never count as a second vote. | registers, SR, PC, memory written, the exception taken and its stack frame, the clock total; not the bus order, not the prefetch queue's contents | **T2** inside cputest's checked scope (below), T3 outside |
+| WinUAE's CPU tester core | `tonioni/WinUAE` `6e0d5ae15a9e7ae071d64fa052a34429ed787476` (2026-10-27), via winuae-referee 0.2.0 (`emu-tools-gpl2` `tools/winuae`), since 2026-11-24; `1977af501f6c3389c2eefe119ecb10c82d6582f3` (2026-09-17) before, with every number below identical at both pins | UAE (Bernd Schmidt, 1995) as developed by Toni Wilen; corrected against real Amigas with `cputest`.  **Hatari's `src/cpu/` is the same code**: not built here, and it would never count as a second vote. | registers, SR, PC, memory written, the exception taken and its stack frame, the clock total; not the bus order, not the prefetch queue's contents | **T2** inside cputest's checked scope (below), T3 outside |
 | Musashi | `kstenerud/Musashi` `313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd` (2026-03-08) | Hand-written interpreter (Karl Stenerud), independent of both MAME's microcode transcription and UAE; MAME's 68000 core before 2023 | architectural results; group 1/2 exception entry | **T3**, and only inside its model |
 
 Neither referee shares a lineage with the gate (SingleStepTests/m68000 and
@@ -49,26 +51,38 @@ errors.  That core, not WinUAE's emulator loop, is what the Amiga-side
 program compares real hardware against.  A small driver builds that core
 following the readme's build steps on Linux and, for each case, loads the
 state, runs the instruction once and prints what the generator would have
-recorded.  **The driver is WinUAE-derived and GPL-2.0-or-later**, so since
-2026-11-19 it is a separate local tool, `m68000-winuae-referee`, with its
-own LICENSE and build script; it was in this repository from `b3ac8ed`
-(2026-09-21) until then, including tag `v0.1.0` and the 0.1.0 sdist
-([provenance](provenance.md)).  This repository only runs its binary, a
-closed box, through `WINUAE_REFEREE`:
+recorded.  **The driver is WinUAE-derived, and as built it is
+GPL-2.0-only.**  It was in this repository from `b3ac8ed` (2026-09-21) to
+2026-11-19, including tag `v0.1.0` and the 0.1.0 sdist
+([provenance](provenance.md)); from 2026-11-19 it was the separate local
+tool `m68000-winuae-referee`, and since 2026-11-24 it is the tool `winuae`
+in `emu-tools-gpl2` (that repository's `tools/winuae/README.md` describes
+its build, protocol and model; the stand-alone repository is archived).
+This repository only runs its binary, a closed box, at
+`$EMU_TOOLS_GPL2/tools/winuae/build/winuae_referee`; a script that needs it
+and finds `EMU_TOOLS_GPL2` unset or the binary absent stops with exit
+status 3, naming the variable and the path:
 
 ```text
-# in the m68000-winuae-referee directory
-python build_winuae.py
-export WINUAE_REFEREE=$PWD/build/winuae/winuae_referee
+python3 -I "$EMU_TOOLS_GPL2/tools/winuae/build_winuae.py"             # fetches WinUAE at its pin there, builds
+python3 -I "$EMU_TOOLS_GPL2/tools/winuae/build_winuae.py" --version   # winuae-referee 0.2.0 (WinUAE 6e0d5ae)
 ```
 
 Everything WinUAE gives here is tagged **OBSERVED** (closed box, WinUAE
-`1977af50`).
+`6e0d5ae` via winuae-referee 0.2.0).  The tool moved from pin `1977af5` to
+`6e0d5ae` on 2026-11-24 (the commit that adds WinUAE's `COPYING`). The
+tool's own gate ran this repository's `calibrate.py winuae`, `bus_errors.py`,
+`questions.py` and `rerun_680x0.py` with a build at each pin and found every
+report and dump identical apart from wall time (its README, "Gate"); here,
+`calibrate.py winuae` and `bus_errors.py` were re-run through the new path
+the same day and gave byte-identical dumps to the old path's
+([provenance](provenance.md), "Closed-box sources, 2026-11-24").
 
-**What it models, and what it does not.**  The tester never executes an
+**What it models, and what it does not** (as the tool's README describes
+its outputs; OBSERVED in the runs).  The tester never executes an
 exception: when the instruction raises one, it records the exception number
 and builds the frame separately, and the Amiga side adds a fixed cost for
-the exception's own processing, which the driver reproduces.  So the
+the exception's own processing, which the driver reports (`excyc`).  So the
 referee's view is the state *at the moment the exception is raised* plus
 the frame; `referee.py` recovers the same view from a corpus case or a core
 run (the frame read off the stack, the SSP before it, the SR it stacked).
@@ -107,7 +121,11 @@ prefetch bus error tests verified.  68000 read bus errors re-verified"
 "Fixed CPU tester detected differences between UAE and real CPUs", a
 68000 list covering LINK A7, CHK flags, divide-by-zero flags, MOVE.W to
 -(An) faults, (An)+/-(An) on address errors, DBcc with an odd offset;
-4.4.0: stacked PC fields, odd vectors; 5.3.0: branch bus errors).
+4.4.0: stacked PC fields, odd vectors; 5.3.0: branch bus errors).  These
+readme and changelog lines are the author's prose about runs on real
+Amigas, read from WinUAE's fetched tree before 2026-11-24 and not re-read
+since (this repository no longer fetches it); they say why the rows are
+ranked T2, and the values themselves rest on the closed-box run.
 
 So, inside scope (T2): results, flags (undefined ones included), address-
 error frames and register side effects, odd-vector frames, read and
@@ -199,7 +217,7 @@ WinUAE's answer is T2.
 | --- | --- | --- | --- | --- | --- |
 | **DBcc to an odd target** (DBF D0,*+$13): stacked PC | instr + 4 ($1004), = gate (MAME) | target + 2 ($1015); Dn not decremented (= core); in scope (changelog 4.3.0 "DBcc and odd offset ... Address error stacked PC was wrong", fixed on hardware; AESRC) | fault taken at the next fetch: no frame in one step (out of model) | CLK: the odd target | **Conflict** between T2 (WinUAE, run) and the gate (T3).  Core left on the gate; **contested** ([claims](claims.md)). |
 | **CHK timing, 8 or 10** (Dn = $8000, bound $7FFF; and 2 more overflow cases) | 38 total (8 internal) | 40 (6 + 34) | 40 | CLK: 10 (the 605 680x0 cases, below) | Undecided.  WinUAE, CLK and Musashi say 10, MAME 8; the difference is 2 clocks, inside cputest's ±2, so no T2 claim either way.  Settle: a logic-analyser capture of this CHK on a 68000. |
-| **Double bus fault** (address error with SSP odd; or with vector 3 odd) | halts (both) | tester: out of scope (skips halting tests; this driver reports `oddssp` / `doublefault`); WinUAE's emulator, as its source read before 2026-09-21 (history, not evidence): halts for both; changelog 4.4.0 "Odd bus error or address error vector will halt the CPU" | SSP odd: halts (run); vector 3 odd: fault at the next fetch, not run | MAME 0.285: another address error | T3 only (a reading and a hand-written core, against MAME), plus the manual (UM 5.4.4).  No change.  Settle: hardware (an odd SSP, then a fault). |
+| **Double bus fault** (address error with SSP odd; or with vector 3 odd) | halts (both) | tester: out of scope (skips halting tests; this driver reports `oddssp` / `doublefault`); WinUAE's emulator, as its source read before 2026-09-21 (history, not evidence; HYPOTHESIS): halts for both; changelog 4.4.0 "Odd bus error or address error vector will halt the CPU" | SSP odd: halts (run); vector 3 odd: fault at the next fetch, not run | MAME 0.285: another address error | T3 only (a reading and a hand-written core, against MAME), plus the manual (UM 5.4.4).  No change.  Settle: hardware (an odd SSP, then a fault). |
 | **Divide-by-zero flags** (DIVU/DIVS over 5 dividends × CCR 0/1F) | DIVS: Z, N=V=C=0; DIVU: N from bit 31, Z from the upper word; X kept | **identical on all 20**; in scope (BASIC with undefined flags checked; changelog 4.3.0 "100% correct") | leaves all flags | CLK: 1 DIVU case (`80ef ... 5745`, dividend $A18E4CFA), N clear; WinUAE, run on that case 2026-11-19, sets N (= core) | **OBSERVED** (closed box, run).  Pinned (`tests/test_referee_evidence.py`); mutant D10 is now killed.  The core's rule was rewritten from these results alone on 2026-11-19; the owner's ruling on resting it on a closed-box run is pending ([provenance](provenance.md)). |
 | **CHK flags with Dn = 0** (bound 5, 0, $FFFF × CCR 0/1F) | Z, N=V=C=0, X kept, trap or not | **identical on all 6**; in scope (CHK undefined flags, BASIC) | leaves N when not trapping | -- | **T2 by running** (for the rule; Dn = 0 itself is a corner the generator may not have hit).  Pinned. |
 | **PC stacked by ILLEGAL** ($4AFC, $4AFA, $4AFB, $4E7B, line A, line F) | the word's own address, 34 clocks | **identical**; in scope (the tester's ILLEGAL set; illegal-exception timing is one its cycle counting relies on) | identical | gate: line A/F (5,000 cases) | **T2 by running.**  Pinned. |
@@ -288,10 +306,11 @@ genuine core bug surfaced: a BusError raised on TAS's write half escaped
   A23-A1).  Program fetches cannot be re-checked, so jump-type
   instructions are left out of the prefetch sweep.
 - A group 1/2 exception whose vector is odd is re-run in the tester's
-  ODDEXC mode (`feature_exception_vectors`), which is how the tester itself
+  odd-vector mode (the ODDEXC preset's), which is how the tester itself
   models it.
-- The frame's SR slot as the tester builds it can be stale (the tester
-  compares SR from its registers, not from the frame), so the referee's SR
-  comes from its registers.
+- The frame's SR slot as the tester builds it was seen to be stale in runs
+  (OBSERVED), so the referee's SR comes from its registers; that the tester
+  itself compares SR from its registers rather than the frame is a
+  HYPOTHESIS here (it was read from WinUAE's source before 2026-09-21).
 - A stopped CPU has made no closing prefetch, so for STOP the corpus's
   `pc` is compared as it stands (Musashi).

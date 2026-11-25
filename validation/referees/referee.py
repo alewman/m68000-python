@@ -2,8 +2,11 @@
 """Feed cases to the referee drivers and compare what they say with the core.
 
 The drivers (musashi_referee, built by build_referees.py; winuae_referee,
-built by the separate GPL tool m68000-winuae-referee and found through
-``WINUAE_REFEREE``) read one case per line and print one result per line.
+built by the GPL-2.0-only tool ``tools/winuae`` of emu-tools-gpl2 and found at
+``$EMU_TOOLS_GPL2/tools/winuae/build/winuae_referee``, the family tool
+contract's one variable per tool repository) read one case per line and print
+one result per line.  What the WinUAE driver prints is OBSERVED (WinUAE
+6e0d5ae via winuae-referee 0.2.0): a closed-box run, never a hardware fact.
 This module turns a corpus case, or a hand-written state, into a case line, runs batches through
 a driver, and reduces every source -- a referee's line, a corpus case's
 final state, a run of this core -- to the same :class:`Outcome`, so that any
@@ -42,10 +45,15 @@ from corpus import Case  # noqa: E402
 from m68000_python import M68000CPU  # noqa: E402
 from m68000_python._core import S  # noqa: E402
 
+#: The WinUAE driver's documented path under a checkout of emu-tools-gpl2 (its
+#: tools/winuae/README.md).  The tool is GPL-2.0-only as built (docs/referees.md);
+#: this MIT repository only runs its binary, a closed box.  The tool's README offers
+#: no per-tool override, so there is none (WINUAE_REFEREE is retired).
+WINUAE_PATH = "tools/winuae/build/winuae_referee"
+_GPL2 = os.environ.get("EMU_TOOLS_GPL2")
+
 BINARIES = {
-    # The WinUAE driver is a separate GPL-2.0-or-later tool (m68000-winuae-referee,
-    # docs/referees.md); this MIT repository only runs its binary, a closed box.
-    "winuae": Path(os.environ.get("WINUAE_REFEREE", HERE / "build" / "winuae" / "winuae_referee")),
+    "winuae": Path(_GPL2, WINUAE_PATH) if _GPL2 else None,
     "musashi": HERE / "build" / "musashi" / "musashi_referee",
 }
 REGISTER_NAMES = tuple(f"d{i}" for i in range(8)) + tuple(f"a{i}" for i in range(7))
@@ -104,13 +112,18 @@ class Driver:
 
     def __init__(self, name: str) -> None:
         binary = BINARIES[name]
-        if not binary.exists():
-            how = (
-                "build m68000-winuae-referee and set WINUAE_REFEREE to its binary"
-                if name == "winuae"
-                else "python validation/referees/build_referees.py"
+        if name == "winuae" and (binary is None or not binary.exists()):
+            # A missing input (the family tool contract): exit status 3, naming the variable.
+            state = f"EMU_TOOLS_GPL2={_GPL2}" if _GPL2 else "EMU_TOOLS_GPL2 is unset"
+            print(
+                f"$EMU_TOOLS_GPL2/{WINUAE_PATH} not found ({state}): set EMU_TOOLS_GPL2 to a"
+                " checkout of emu-tools-gpl2 and build the referee there"
+                ' (python3 -I "$EMU_TOOLS_GPL2/tools/winuae/build_winuae.py"; docs/referees.md)',
+                file=sys.stderr,
             )
-            raise SystemExit(f"{binary} not built: {how}")
+            raise SystemExit(3)
+        if not binary.exists():
+            raise SystemExit(f"{binary} not built: python validation/referees/build_referees.py")
         self.name = name
         self.process = subprocess.Popen(
             [str(binary)],

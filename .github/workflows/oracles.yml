@@ -64,8 +64,8 @@ jobs:
           python scripts/classify_680x0.py 2>/dev/null | tee classify.txt
           grep -q "^787,660 of 1,000,060 cases agree" classify.txt
 
-      # The WinUAE referee is a separate GPL-2.0-or-later tool since 2026-11-19
-      # (m68000-winuae-referee, local only; docs/referees.md), so CI no longer
+      # The WinUAE referee is a GPL-2.0-only tool outside this repository
+      # (emu-tools-gpl2's tools/winuae; docs/referees.md), so CI no longer
       # builds or calibrates it, and the open questions, which need both
       # referees, are run locally.  Musashi (MIT) stays.
       - name: Build the Musashi referee from its pinned source
