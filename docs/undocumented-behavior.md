@@ -69,12 +69,12 @@ the destination register is unchanged.
 | Musashi `divu` | T3 | `V=1`; N, Z, C **unchanged** |
 | m68000 corpus (MAME's microcoded core, run) | T3 | `V=1, N=1, Z=0, C=0` on every overflowing case of `DIVU.json.bin` |
 
-WinUAE's release notes (3.6.0, 2018-01-18) describe the 68020+ variants as
-newly emulated and the 68000 as already correct ("N is also always set").
+WinUAE's release notes (3.6.0, 2018-01-18; paraphrased) describe the 68020+
+variants as newly emulated and the 68000 as already correct, N included.
 The m68000 corpus has no divide-by-zero case (its issue #3). The trap
-path's flags were read from WinUAE's changelog (4.3.0: "DIVU sets Z-flag if
-dividend upper word is zero, N-flag if dividend upper word is negative") and
-then settled by running WinUAE's tester core on 2026-09-21
+path's flags were first read from WinUAE's changelog (4.3.0; paraphrased:
+DIVU by zero sets Z when the dividend's upper word is zero and N when it is
+negative) and then settled by running WinUAE's tester core on 2026-09-21
 ([referees](referees.md)): N from bit 31 of the dividend, Z if its upper
 word is zero, V and C clear, X kept. **OBSERVED** (closed box, inside
 cputest's checked scope); pinned by `tests/test_referee_evidence.py`. The
@@ -93,8 +93,9 @@ owner's ruling on resting this case on a closed-box run is pending
 | Musashi `divs` | T3 | `V=1`, others unchanged; special-cases `$80000000 / -1` as quotient 0 with **Z=1, N=V=C=0** and writes 0 to the register, which no other source does |
 | m68000 corpus, clocks | T3 | an overflow of the magnitudes (\|dividend\| >> 16 ≥ \|divisor\|) ends early at 16 or 18 clocks; a quotient that only proves out of range at the end takes the full 120–156 (the FITTED rule in `_alu.py`, [timing](timing.md)) |
 
-Divide by zero: "DIVS always sets Z-flag" per WinUAE's changelog for 4.3.0
-(the author's prose, read before 2026-11-24 from the tree then fetched).
+Divide by zero: WinUAE's changelog for 4.3.0 says DIVS by zero always sets Z
+(paraphrased; the author's prose, read before 2026-11-24 from the tree then
+fetched).
 **Run 2026-09-21:** WinUAE's CPU-tester core, built from `1977af5` and run
 on DIVU and DIVS by zero ([referees](referees.md); re-run 2026-11-24 at
 `6e0d5ae` via winuae-referee 0.2.0, identical), gives DIVS: Z set, N V C clear; DIVU: N from bit
@@ -132,7 +133,7 @@ PRM Table 3-18: X and C are the decimal carry/borrow, Z is sticky, N and V
 are `U`. The T1 source is flamewing's exhaustive verifier, whose expected
 tables were captured from a Model 1 Genesis; emulators that pass it
 (BlastEm, Genesis Plus GX, Higan, BizHawk, Exodus, Mednafen per its README)
-and WinUAE (3.6.0 notes: "68000 was already correct") all implement:
+and WinUAE (its 3.6.0 notes call its 68000 already correct here) all implement:
 
 - **N** = bit 7 of the corrected result.
 - **V** for `ABCD`: set when bit 7 of the *uncorrected* binary sum was 0 and

@@ -326,30 +326,31 @@ sum them when comparing. This core takes a group 0 exception inside the same
 ## What arcade hosts need
 
 The host schedules everything from the cycle totals the core returns. The
-numbers below are from MAME 0.285 driver sources, restated (BSD-3-Clause
-files in the GPL-2.0+ MAME tree; commit `3bd358f` is tag `mame0285`):
+numbers below are facts from MAME 0.285's driver files, restated in our own
+words with no code kept (commit `3bd358f` is tag `mame0285`; both drivers'
+`license:` lines say BSD-3-Clause, read through the GitHub API 2026-11-25;
+the rest of MAME is GPL-2.0+). DOC (an emulator's configuration, not a
+hardware measurement):
 
 **Sega System 16B** (`src/mame/sega/segas16b.cpp`, e.g. `altbeast`,
 `goldnaxe`, `shinobi2`):
 
-- `MASTER_CLOCK_10MHz = XTAL(20'000'000) / 2`; `M68000(config, m_maincpu, MASTER_CLOCK_10MHz)`.
-  The 68000 runs at **10 MHz**.
-- Z80 sound CPU at `MASTER_CLOCK_10MHz/2` = 5 MHz; YM2151 at 8 MHz / 2.
-- Screen: `set_raw(MASTER_CLOCK_25MHz/4, 400, 0, 320, 262, 0, 224)` with
-  `MASTER_CLOCK_25MHz = XTAL(25'174'800)`: a 6.2937 MHz pixel clock, 400
-  pixels by 262 lines per frame, 320×224 visible, so **60.054 Hz** and
-  15,734 Hz line rate; **166,517 CPU clocks per frame**, 636 per line.
-- `m_maincpu->set_vblank_int("screen", FUNC(segas16b_state::irq4_line_hold))`:
-  one **level-4 interrupt per vblank**, asserted with `HOLD_LINE` (held
-  until acknowledged), **autovectored** (vector 28 at 0x70). Some boards add
-  an i8751 MCU whose vblank hook the driver simulates.
+- The 68000 runs at **10 MHz**: a 20 MHz crystal divided by 2.
+- The Z80 sound CPU runs at half that, 5 MHz; the YM2151 at 8 MHz / 2.
+- The screen's pixel clock is a 25.1748 MHz crystal divided by 4, 6.2937
+  MHz, with 400 pixels by 262 lines per frame and 320×224 visible: so
+  **60.054 Hz** and a 15,734 Hz line rate; **166,517 CPU clocks per frame**,
+  636 per line.
+- One **level-4 interrupt per vblank**, held until acknowledged,
+  **autovectored** (vector 28 at 0x70). Some boards add an i8751 MCU whose
+  vblank hook the driver simulates.
 - Memory is 24-bit with a 315-5195 mapper device in front of the 68000;
   FD1089/FD1094 sets have encrypted program ROMs the driver decrypts. The
   core sees none of this: the host owns the map.
 
 **Sega System 16A** (`src/mame/sega/segas16a.cpp`, e.g. `shinobi`,
-`alexkidd`): `M68000(config, m_maincpu, 10000000)`, same `irq4_line_hold`
-on vblank; the Z80 is 4 MHz and the sound path goes through an NEC 7751.
+`alexkidd`): the 68000 at 10 MHz, the same held level-4 interrupt on
+vblank; the Z80 is 4 MHz and the sound path goes through an NEC 7751.
 `shinobi` in MAME is the System 16A set, which is why its `-listxml` shows
 a 4 MHz Z80; `altbeast` is 16B.
 

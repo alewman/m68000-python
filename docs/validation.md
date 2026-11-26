@@ -402,18 +402,18 @@ would be the cheapest route to a T1 statement about it.
 <https://github.com/tonioni/WinUAE>, GPL-2.0-only at the pin (`6e0d5ae`, whose
 `COPYING` is the GPL-2.0 text), `cputest/readme.txt` (the author's prose,
 read from the fetched tree before 2026-11-24 and not re-read since; this
-repository no longer fetches WinUAE). Toni
-Wilen's tester generates test sets from the UAE core ("All the CPU logic
-comes from UAE CPU core"), then runs them *on real Amigas*, stopping at the
+repository no longer fetches WinUAE; what follows is a paraphrase of
+that readme, no text of it kept). Toni Wilen's tester generates test sets
+from the UAE CPU core, then runs them *on real Amigas*, stopping at the
 first mismatch; the emulator is corrected until hardware agrees. It checks
-"All CPU registers (D0-D7/A0-A7, PC and SR/CCR)", "Generated exception and
-stack frame contents", "Memory writes", "Undefined flags (for example DIV
-and CHK or 68000/010 bus address error)", and on a 7 MHz PAL Amiga with
-real Fast RAM, cycle counts to ±2 clocks. Compatibility line for the
-68000: "Complete. Including bus and address error stack frame/register/CCR
-modification undocumented behavior. Full cycle count support." Caveats from
-the same file: TAS results depend on RMW-compatible RAM; STOP and RESET
-variants that would halt are skipped; the generator is "very brute force".
+every CPU register (D0-D7, A0-A7, PC and SR), the exception taken and its
+stack frame, memory writes, and undefined flags (DIV, CHK and the 68000/010
+bus and address errors among them), and on a 7 MHz PAL Amiga with real Fast
+RAM, cycle counts to ±2 clocks. For the 68000 the readme calls its coverage
+complete, bus and address error frames, registers and flags included, with
+full cycle counts. Its caveats: TAS results depend on RMW-compatible RAM;
+STOP and RESET variants that would halt are skipped; the generator is a
+brute-force one.
 
 What this repository can use without an Amiga: the tester's own 68000
 core, which the GPL-2.0-only tool `tools/winuae` in `emu-tools-gpl2`

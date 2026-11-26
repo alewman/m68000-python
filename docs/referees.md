@@ -113,13 +113,13 @@ the illegal words last), AESRC/AEDST (odd source and destination
 addresses: operand address errors), ODDSTK (odd user stack), ODDEXC (odd
 exception vectors for MOVE to SR, MOVE USP, ILLEGAL, CHK, TRAP, TRAPV,
 DIVU, DIVS, ORI to SR), IRQ/ODDIRQ (interrupts), and BEPR/BEBR/BESRC/BEDST/
-BESRCW/BEDSTW (bus errors, with extra hardware).  The author's reports:
-"09.02.2020 All 68000 tests are 100% confirmed, including full cycle-count
-support"; "68000 re-verified (except bus errors)" (15.02.2020); "All
-prefetch bus error tests verified.  68000 read bus errors re-verified"
-(16.02.2020); and WinUAE's changelog (`od-win32/winuaechangelog.txt`, 4.3.0:
-"Fixed CPU tester detected differences between UAE and real CPUs", a
-68000 list covering LINK A7, CHK flags, divide-by-zero flags, MOVE.W to
+BESRCW/BEDSTW (bus errors, with extra hardware).  The author's reports
+(cputest's readme, paraphrased): on 09.02.2020 every 68000 test confirmed,
+cycle counts included; on 15.02.2020 the 68000 re-verified except bus
+errors; on 16.02.2020 every prefetch bus error test verified and the 68000's
+read bus errors re-verified.  WinUAE's changelog (`od-win32/winuaechangelog.txt`)
+lists for 4.3.0 the differences between UAE and real CPUs that the tester
+found and that were fixed, a 68000 list covering LINK A7, CHK flags, divide-by-zero flags, MOVE.W to
 -(An) faults, (An)+/-(An) on address errors, DBcc with an odd offset;
 4.4.0: stacked PC fields, odd vectors; 5.3.0: branch bus errors).  These
 readme and changelog lines are the author's prose about runs on real
@@ -215,10 +215,10 @@ WinUAE's answer is T2.
 
 | Question | Core | WinUAE (lineage UAE) | Musashi | Other lineages | What can be claimed |
 | --- | --- | --- | --- | --- | --- |
-| **DBcc to an odd target** (DBF D0,*+$13): stacked PC | instr + 4 ($1004), = gate (MAME) | target + 2 ($1015); Dn not decremented (= core); in scope (changelog 4.3.0 "DBcc and odd offset ... Address error stacked PC was wrong", fixed on hardware; AESRC) | fault taken at the next fetch: no frame in one step (out of model) | CLK: the odd target | **Conflict** between T2 (WinUAE, run) and the gate (T3).  Core left on the gate; **contested** ([claims](claims.md)). |
+| **DBcc to an odd target** (DBF D0,*+$13): stacked PC | instr + 4 ($1004), = gate (MAME) | target + 2 ($1015); Dn not decremented (= core); in scope (changelog 4.3.0, paraphrased: UAE's stacked PC for a DBcc to an odd offset was wrong, fixed against hardware; AESRC) | fault taken at the next fetch: no frame in one step (out of model) | CLK: the odd target | **Conflict** between T2 (WinUAE, run) and the gate (T3).  Core left on the gate; **contested** ([claims](claims.md)). |
 | **CHK timing, 8 or 10** (Dn = $8000, bound $7FFF; and 2 more overflow cases) | 38 total (8 internal) | 40 (6 + 34) | 40 | CLK: 10 (the 605 680x0 cases, below) | Undecided.  WinUAE, CLK and Musashi say 10, MAME 8; the difference is 2 clocks, inside cputest's ±2, so no T2 claim either way.  Settle: a logic-analyser capture of this CHK on a 68000. |
-| **Double bus fault** (address error with SSP odd; or with vector 3 odd) | halts (both) | tester: out of scope (skips halting tests; this driver reports `oddssp` / `doublefault`); WinUAE's emulator, as its source read before 2026-09-21 (history, not evidence; HYPOTHESIS): halts for both; changelog 4.4.0 "Odd bus error or address error vector will halt the CPU" | SSP odd: halts (run); vector 3 odd: fault at the next fetch, not run | MAME 0.285: another address error | T3 only (a reading and a hand-written core, against MAME), plus the manual (UM 5.4.4).  No change.  Settle: hardware (an odd SSP, then a fault). |
-| **Divide-by-zero flags** (DIVU/DIVS over 5 dividends × CCR 0/1F) | DIVS: Z, N=V=C=0; DIVU: N from bit 31, Z from the upper word; X kept | **identical on all 20**; in scope (BASIC with undefined flags checked; changelog 4.3.0 "100% correct") | leaves all flags | CLK: 1 DIVU case (`80ef ... 5745`, dividend $A18E4CFA), N clear; WinUAE, run on that case 2026-11-19, sets N (= core) | **OBSERVED** (closed box, run).  Pinned (`tests/test_referee_evidence.py`); mutant D10 is now killed.  The core's rule was rewritten from these results alone on 2026-11-19; the owner's ruling on resting it on a closed-box run is pending ([provenance](provenance.md)). |
+| **Double bus fault** (address error with SSP odd; or with vector 3 odd) | halts (both) | tester: out of scope (skips halting tests; this driver reports `oddssp` / `doublefault`); WinUAE's emulator, as its source read before 2026-09-21 (history, not evidence; HYPOTHESIS): halts for both; changelog 4.4.0 (paraphrased): an odd bus error or address error vector halts the CPU | SSP odd: halts (run); vector 3 odd: fault at the next fetch, not run | MAME 0.285: another address error | T3 only (a reading and a hand-written core, against MAME), plus the manual (UM 5.4.4).  No change.  Settle: hardware (an odd SSP, then a fault). |
+| **Divide-by-zero flags** (DIVU/DIVS over 5 dividends × CCR 0/1F) | DIVS: Z, N=V=C=0; DIVU: N from bit 31, Z from the upper word; X kept | **identical on all 20**; in scope (BASIC with undefined flags checked; changelog 4.3.0 calls these flags fully correct, paraphrased) | leaves all flags | CLK: 1 DIVU case (`80ef ... 5745`, dividend $A18E4CFA), N clear; WinUAE, run on that case 2026-11-19, sets N (= core) | **OBSERVED** (closed box, run).  Pinned (`tests/test_referee_evidence.py`); mutant D10 is now killed.  The core's rule was rewritten from these results alone on 2026-11-19; the owner's ruling on resting it on a closed-box run is pending ([provenance](provenance.md)). |
 | **CHK flags with Dn = 0** (bound 5, 0, $FFFF × CCR 0/1F) | Z, N=V=C=0, X kept, trap or not | **identical on all 6**; in scope (CHK undefined flags, BASIC) | leaves N when not trapping | -- | **T2 by running** (for the rule; Dn = 0 itself is a corner the generator may not have hit).  Pinned. |
 | **PC stacked by ILLEGAL** ($4AFC, $4AFA, $4AFB, $4E7B, line A, line F) | the word's own address, 34 clocks | **identical**; in scope (the tester's ILLEGAL set; illegal-exception timing is one its cycle counting relies on) | identical | gate: line A/F (5,000 cases) | **T2 by running.**  Pinned. |
 | **Bus errors: stacked PC and IR** | see the sweep below | read: 87,930 of 97,316 swept cases agree; prefetch 76,792 of 231,067; write 23,327 of 70,350 | out of model | none | T2 where they agree on reads and prefetches (7 cases pinned); the disagreements are open (below). |
@@ -229,10 +229,11 @@ WinUAE's answer is T2.
 Two further conflicts surfaced while calibrating, both inside scope and
 both against the gate: **An after a word (An)+ address error** (WinUAE:
 not moved; gate: moved; 4,330 gate cases, 14,148 680x0 cases where core and
-CLK both move it; CMPM.L differs too, 115 gate cases; changelog 4.3.0 "An contents are updated (or not updated)
-if -(an) or (an)+"), and **I/N of a MOVE.W to -(An) whose write faults when
+CLK both move it; CMPM.L differs too, 115 gate cases; changelog 4.3.0,
+paraphrased: whether An is updated after an -(An) or (An)+ address error is
+now emulated), and **I/N of a MOVE.W to -(An) whose write faults when
 the next word is illegal or privileged** (WinUAE 1, gate 0; 35 gate cases;
-changelog 4.3.0 "CPU bug found and emulated").  Both are **contested**
+changelog 4.3.0, paraphrased: a CPU bug found and now emulated).  Both are **contested**
 ([claims](claims.md), decided 2026-09-21: the core stays on the gate).
 
 ## The 680x0 disagreement table, re-derived by running WinUAE

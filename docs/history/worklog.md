@@ -134,12 +134,13 @@ unchanged; each needs Aubrey's decision.
 
 12. **DBcc to an odd target: target + 2 (WinUAE, T2 by running) or the
    instruction + 4 (gate, MAME).**  632 gate cases; 1,964 680x0 cases where
-   CLK stacks the target.  In scope: WinUAE changelog 4.3.0, 68000 list:
-   "DBcc and odd offset ... UAE: Address error stacked PC was wrong" (fixed
-   against hardware).  The core follows the gate.
+   CLK stacks the target.  In scope: WinUAE changelog 4.3.0, 68000 list
+   (paraphrased 2026-11-25: UAE's stacked PC for a DBcc to an odd offset was
+   wrong, fixed against hardware).  The core follows the gate.
 13. **A word (An)+ operand that faults: is An moved?**  WinUAE (T2 by
-   running; changelog 4.3.0 "An contents are updated (or not updated) if
-   -(an) or (an)+", the AESRC preset checks registers): not moved.  The gate
+   running; changelog 4.3.0, paraphrased: whether An is updated after an
+   -(An) or (An)+ address error is now emulated; the AESRC preset checks
+   registers): not moved.  The gate
    (4,330 cases in 32 files) and CLK (14,148 680x0 cases): moved.  This is
    the largest conflict and touches every word (An)+ address error the gate
    records.  The core follows the gate.
@@ -155,9 +156,10 @@ unchanged; each needs Aubrey's decision.
    differs from both the core and CLK in 373 680x0 cases.  The core follows
    the gate.
 16. **MOVE.W to -(An) whose write faults, when the word now in IR is illegal
-   or privileged: I/N.**  WinUAE (T2 by running; changelog 4.3.0 "CPU bug
-   found and emulated ... this only happens if following instruction would
-   cause illegal instruction, privilege violation or trace is pending"): 1.
+   or privileged: I/N.**  WinUAE (T2 by running; changelog 4.3.0,
+   paraphrased: a CPU bug found and now emulated, which shows only when the
+   next instruction would take an illegal-instruction or privilege-violation
+   exception, or a trace is pending): 1.
    Gate (35 cases) and CLK (85): 0.  The same rule, applied to bus errors,
    is most of the prefetch and write differences in question 19.
 17. **I/N for a fault during group 2 exception processing** (TRAP, TRAPV,

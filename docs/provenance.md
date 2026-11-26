@@ -241,7 +241,15 @@ changelog lines (the author's prose about hardware runs, quoted in referees.md,
 validation.md, undocumented-behavior.md and test docstrings) are kept and marked as read
 from the fetched tree before 2026-11-24, not re-read; they explain the T2 ranking, and the
 values rest on the closed-box runs (for Aubrey: whether such prose from a closed-box tree
-may stay). `validation/lockstep.py` and `mame_trace.py` no longer quote MAME driver
+may stay). **Decided 2026-11-25 (Aubrey, L9):** paraphrase with a citation and drop
+the quotations. Done in the docs the same day (referees.md, validation.md,
+undocumented-behavior.md, history/worklog.md): each line is now our paraphrase, cited to
+the readme or the changelog version. The test docstrings in
+`tests/test_referee_evidence.py` still quote the changelog (L9 named the docs only).
+Also by L9: the MAME System 16A/16B driver code fragments in timing.md ("What arcade hosts
+need") are gone; the clocks, screen timing and interrupt they supported are restated in
+prose with the driver files cited (their `license:` lines, BSD-3-Clause, read 2026-11-25).
+`validation/lockstep.py` and `mame_trace.py` no longer quote MAME driver
 internals (function names, a code comment): the behaviours are stated as OBSERVED in the
 lockstep traces, and why MAME drops TAS's write-back is HYPOTHESIS.
 
